@@ -1,0 +1,2441 @@
+============================================================
+WIKI: thebakercat.github.io/sa-demo-wiki
+09.02.06 Демо — Полное руководство
+============================================================
+
+--- README.md ---
+>> Wiki по модулями ДЭ БУ/ПУ 09.02.06-1-2026(приказ №1548 от 09 декабря 2016)
+
+https://thebakercat.github.io/sa-demo-wiki/
+
+Комплект Оценочной Документации:
+https://bom.firpo.ru/file/public/117422/%D0%9A%D0%9E%D0%94%2009.02.06-1-2026%20%D0%A2%D0%BE%D0%BC%201.pdf
+
+Приложение к образцу задания:
+https://bom.firpo.ru/file/public/113895/%D0%9F%D1%80%D0%B8%D0%BB_%D0%9E%D0%97_%D0%9A%D0%9E%D0%94%2009.02.06-1-2026.zip
+
+
+=== ПРИЛОЖЕНИЕ ===
+
+--- wiki/appendix/ip_table.md ---
+>> Пример таблицы адресации
+
+Данная таблица адресации используется для конфигурации сети и выполнения заданий на протяжении всего руководства, она приведена для примера и понимания топологии.
+
+Это не эталон и не панацея - просто пример. Автору так удобнее. У вас она может отличаться.
+
+Для отчёта в рамках ДЭ рекомендуется заполнять таблицу, придерживаясь `Прил_3_ОЗ_КОД 09.02.06-1-2026-М1.docx`
+
+| Имя устройства | Интерфейс       | Сеть   | IP-адрес         | Шлюз по-умолчанию |
+|----------------|-----------------|--------|------------------|-------------------|
+| ISP            | ens18           | WAN    | Dynamic          | Dynamic           |
+| ISP            | ens19           | ISP-HQ | 172.16.1.1/28    | -                 |
+| ISP            | ens20           | ISP-BR | 172.16.2.1/28    | -                 |
+| HQ-RTR         | ens18           | ISP-HQ | 172.16.1.2/28    | 172.16.1.1        |
+| HQ-RTR         | ens19 (vlan100) | HQ-Net | 192.168.100.1/28 | -                 |
+| HQ-RTR         | ens19 (vlan200) | HQ-Net | 192.168.200.1/28 | -                 |
+| HQ-RTR         | ens19 (vlan999) | HQ-Net | 172.168.99.1/29  | -                 |
+| BR-RTR         | ens18           | ISP-BR | 172.16.2.2/28    | 172.16.2.1        |
+| BR-RTR         | ens19           | BR-Net | 192.168.3.1/28   | -                 |
+| HQ-SRV         | ens18           | HQ-Net | 192.168.100.2/28 | 192.168.100.1     |
+| HQ-CLI         | ens18           | HQ-Net | 192.168.200.2/28 | 192.168.200.1     |
+| BR-SRV         | ens18           | BR-Net | 192.168.3.2/28   | 192.168.3.1       |
+
+
+=== МОДУЛЬ 1 ===
+
+--- wiki/module1/task1-1.md ---
+>> 1. Произведите базовую настройку устройств:
+
+>> 1.1 Настройте имена устройств согласно топологии. 
+Конфигурируем на всех хостах их hostname, используя полное доменное имя.
+
+```shell
+hostnamectl set-hostname "название машины"
+```
+
+::: tip
+Полное доменное имя будет иметь вид:
+
+```
+%hostname%.%domain%
+```
+
+Где `%hostname%` - наименование машины из топологии, а `%domain%` наш домен. Пример:
+
+```shell
+hostnamectl set-hostname isp.au-team.irpo
+```
+
+Здесь, `isp` - наименование машины, `au-team.irpo` - домен.
+:::
+
+Перезапускаем оболочку
+
+```shell
+exec $SHELL
+```
+
+>> 1.2 На всех устройствах необходимо сконфигурировать IPv4:
+::: details
+IP-адрес должен быть из приватного диапазона, в случае, если сеть
+локальная, согласно RFC1918
+
+* Локальная сеть в сторону HQ-SRV(VLAN 100) должна вмещать не
+более 32 адресов
+
+* Локальная сеть в сторону HQ-CLI(VLAN 200) должна вмещать не
+менее 16 адресов
+
+* Локальная сеть для управления(VLAN 999) должна вмещать не
+более 8 адресов
+
+* Локальная сеть в сторону BR-SRV должна вмещать не более 16
+адресов
+
+Сведения об адресах занесите в таблицу 2, в качестве примера
+используйте Прил_3_О1_КОД 09.02.06-1-2026-М1
+:::
+
+Рассчитываем IP-адресацию устройств, заносим в таблицу.
+
+На данном этапе гораздо логичнее рассчитать IP-адресацию сразу для всех машин и сетей, дабы пользоваться таблицей в дальнейшем.
+
+Можно воспользоваться [подготовленным примером][1].
+
+[1]:
+
+--- wiki/module1/task1-10.md ---
+>> 10. Настройте инфраструктуру разрешения доменных имён для офисов HQ и BR:
+
+::: details
+* Основной DNS-сервер реализован на HQ-SRV
+
+* Сервер должен обеспечивать разрешение имён в сетевые адреса
+устройств и обратно в соответствии с таблицей 3
+
+* В качестве DNS-сервера пересылки используйте любой общедоступный
+DNS-сервер (77.88.8.7, 77.88.8.3 или другие)
+:::
+
+В рамках руководства, будем придерживаться [этой таблицы адресации][1], чего и вам советуем, если вы слепо следуете руководству и не понимаете что делаете!
+
+Устанавливаем BIND на HQ-SRV.
+
+```shell
+apt-get install bind bind-utils
+```
+
+>> 10.1 Конфигурация options.conf
+
+Редактируем файл `/etc/bind/options.conf`.
+
+::: info
+Этот же файл доступен по пути `/var/lib/bind/etc/bind/options.conf`.
+:::
+
+```txt:line-numbers {3-15}
+>> HQ-SRV
+>> /etc/bind/options.conf
+options {
+    directory "/etc/bind/zone";
+    listen-on { 127.0.0.1; 192.168.100.0/28; };
+    forwarders { 77.88.8.8; };
+    recursion yes;
+    allow-query { any; };
+    dnssec-validation no;
+};
+```
+
+>> 10.2 Конфигурация зон
+
+Редактируем файл `/etc/bind/local.conf` для объявления прямой и обратной зон.
+
+```txt:line-numbers {3-14}
+>> HQ-SRV
+>> /etc/bind/local.conf
+zone "au-team.irpo" {
+    type master;
+    file "au-team.irpo.db";
+};
+
+zone "100.168.192.in-addr.arpa" {
+    type master;
+    file "100.168.192.in-addr.arpa.db";
+};
+```
+
+>> 10.3 Файл прямой зоны
+
+Создаём файл прямой зоны `/etc/bind/zone/au-team.irpo.db`.
+
+```txt:line-numbers {3-18}
+>> HQ-SRV
+>> /etc/bind/zone/au-team.irpo.db
+$TTL 1D
+@       IN      SOA     hq-srv admin.au-team.irpo. (
+                        2026042401
+                        1H
+                        30M
+                        1W
+                        1D )
+;
+
+@       IN      NS      hq-srv.au-team.irpo.
+hq-rtr  IN      A       192.168.100.1
+hq-srv  IN      A       192.168.100.2
+br-rtr  IN      A       192.168.3.1
+br-srv  IN      A       192.168.3.2
+hq-cli  IN      A       192.168.200.2
+```
+
+::: tip
+Конкретные записи (A-записи) и их IP-адреса должны соответствовать таблице 3 из задания. Сверьтесь с вашей таблицей адресации.
+:::
+
+>> 10.4 Файл обратной зоны
+
+Создаём файл обратной зоны `/etc/bind/zone/100.168.192.in-addr.arpa.db`.
+
+```txt:line-numbers {3-14}
+>> HQ-SRV
+>> /etc/bind/zone/100.168.192.in-addr.arpa.db
+$TTL 1D
+@       IN      SOA     hq-srv.au-team.irpo. admin.au-team.irpo. (
+                        2026042401
+                        1H
+                        30M
+                        1W
+                        1D )
+;
+@       IN      NS      hq-srv.au-team.irpo.
+1       IN      PTR     hq-rtr.au-team.irpo.
+2       IN      PTR     hq-srv.au-team.irpo.
+```
+
+>> 10.5 Применение и проверка
+
+Включаем и добавляем BIND в автозагрузку.
+
+```shell
+systemctl enable --now bind
+```
+
+Проверяем корректность конфигурации.
+
+```shell
+named-checkconf
+```
+
+```shell
+named-checkzone au-team.irpo /etc/bind/zone/au-team.irpo.db
+```
+
+Проверяем разрешение имён.
+
+```shell
+>> HQ-SRV
+dig @127.0.0.1 hq-srv.au-team.irpo
+```
+
+Если в ответе присутствует правильный IP-адрес — DNS-сервер настроен корректно.
+
+::: tip
+Не забудьте на всех машинах обновить `resolv.conf`, указав HQ-SRV в качестве DNS-сервера:
+
+```
+nameserver 192.168.100.2
+```
+:::
+
+[1]:
+
+--- wiki/module1/task1-11.md ---
+>> 11. Настройте часовой пояс на всех устройствах согласно месту проведения экзамена
+
+::: details
+* За исключением виртуального коммутатора, в случае его использования
+:::
+
+Устанавливаем часовой пояс на всех машинах в соответствии с местом проведения экзамена.
+
+```shell
+timedatectl set-timezone 
+```
+
+Список доступных зон можно посмотреть командой:
+
+```shell
+timedatectl list-timezones
+```
+
+::: tip
+Для Екатеринбурга, к примеру, зона будет `Asia/Yekaterinburg`:
+
+```shell
+timedatectl set-timezone Asia/Yekaterinburg
+```
+:::
+
+Проверяем результат:
+
+```shell
+timedatectl
+```
+
+__Повторите на всех машинах стенда.__
+
+--- wiki/module1/task1-2.md ---
+>> 2. Настройте доступ к сети Интернет, на маршрутизаторе ISP:
+
+Настройте адресацию на интерфейсах
+
+::: details
+* Интерфейс, подключенный к магистральному провайдеру, получает
+адрес по DHCP
+
+* Настройте маршрут по умолчанию, если это необходимо
+
+* Настройте интерфейс, в сторону HQ-RTR, интерфейс подключен к сети
+172.16.1.0/28
+
+* Настройте интерфейс, в сторону BR-RTR, интерфейс подключен к сети
+172.16.2.0/28
+:::
+
+В рамках руководства, будем придерживаться [этой таблицы адресации][1], чего и вам советуем, если вы слепо следуете руководству и не понимаете что делаете!
+
+>> 2.1 Конфигурируем подключение к WAN на ISP
+
+При выполнении вами задания, наименования интерфейсов на машинах и сети, к которым они подключены, могут отличаться от использованных в данном руководстве.
+
+Вы можете получить информацию о интерфейсах на машине с помощью `ip a`.
+
+::: details
+::: info
+Мы же, в рамках данного задания, договоримся использовать:
+
+* `ens18` в качестве интерфейса в сторону WAN
+* `ens19` в качестве интерфейса в сторону офиса HQ
+* `ens20` в качестве интерфейса в сторону офиса BR
+
+:::
+
+В первую очередь, нам необходимо включить IP Forwarding. 
+Если пропустить этот шаг что угодно требующее пересылки пакетов между сетевыми интерфейсами работать __НЕ БУДЕТ__
+
+Редактируем файл по пути `/etc/net/sysctl.conf` на хосте `ISP`
+
+```python:line-numbers
+>> IPv4 packet forwarding.
+>> # This variable is special, its change resets all configuration
+>> parameters to their default state (RFC 1122 for hosts, RFC 1812 for
+>> routers).
+>> net.ipv4.ip_forward = 0 # [!code --]
+net.ipv4.ip_forward = 1 # [!code ++]
+
+>> # Source validation by reversed path, as specified in RFC 1812.
+```
+
+Сразу же конфигурируем интерфейс `ens18`. Получать ip и gateway он будет по DHCP.
+
+```txt:line-numbers {3-7}
+>> ISP
+>> /etc/net/ifaces/ens18/options
+TYPE=eth
+CONFIG_IPV4=yes
+CONFIG_WIRELESS=no
+DISABLED=no
+BOOTPROTO=dhcp
+```
+
+И указываем публичные доменные сервера для корректного разрешения доменных имён.
+
+```text:line-numbers {3}
+>> ISP
+>> /etc/net/ifaces/ens18/resolv.conf
+nameserver 77.88.8.8
+```
+
+Применяем обновлённую сетевую конфигурацию
+```shell
+systemctl restart network
+```
+
+Проверяем наличие доступа к репозиториям дистрибутива. Если доступа нет, значит в ходе выполнения был допущен косяк.
+
+>> 2.2 Конфигурация сети в сторону офиса HQ
+::: details
+::: info
+Для конфигурации сети на машине HQ-RTR будут использоваться следующие обозначения:
+
+* `ens18` - интерфейс в сторону ISP
+* `ens19` - интерфейс для коммутации
+:::
+
+В первую очередь конфигурируем интерфейс `ens19` на стороне `ISP`. Делается это подобным образом:
+
+```txt:line-numbers {3-7}
+>> ISP
+>> /etc/net/ifaces/ens19/options
+TYPE=eth
+CONFIG_IPV4=yes
+CONFIG_WIRELESS=no
+DISABLED=no
+BOOTPROTO=static
+```
+
+::: tip
+В `options` есть несколько обязательных для указания параметров вроде `TYPE` или `BOOTPROTO`.
+
+Полностью ознакомиться со всеми параметрами, которые используются в `options` для конфигурации сетевых интерфейсов, можно на [этой странице][2].
+:::
+
+```   txt:line-numbers {3}
+>> ISP
+>> /etc/net/ifaces/ens19/ipv4address
+172.16.1.1/28
+```
+::: info
+Конфигурация статических IPv4 адресов для `etcnet` всегда происходит в файле `ipv4address` необходимого сетевого интерфейса. 
+:::
+
+---
+
+Конфигурируем `ens18` на стороне HQ-RTR подобным образом.
+```txt:line-numbers {3-7}
+>> HQ-RTR
+>> /etc/net/ifaces/ens18/options
+TYPE=eth
+CONFIG_IPV4=yes
+CONFIG_WIRELESS=no
+DISABLED=no
+BOOTPROTO=static
+```
+
+```txt:line-numbers {3}
+>> HQ-RTR
+>> /etc/net/ifaces/ens18/ipv4address
+172.16.1.2/28
+```
+
+```txt:line-numbers {3}
+>> HQ-RTR
+>> /etc/net/ifaces/ens18/ipv4route
+default via 172.16.1.1
+```
+
+:::info
+В файле `ipv4route` можно указывать любые статические маршруты.
+
+Однако, в рамках ДЭ мы настраиваем динамическую маршрутизацию, потому тут мы конфигурируем только default gateway маршруты.
+:::
+
+```text:line-numbers {3}
+>> HQ-RTR
+>> /etc/net/ifaces/ens18/resolv.conf
+nameserver 77.88.8.8
+```
+
+::: info
+В файле `resolv.conf` мы конфигурируем сервера доменных имён, к которым будет обращаться наш системный резолвер.
+
+Сервер доменных имён не обязательно должен быть публичным. Далее в заданиях мы будем конфигурировать сервер доменных имён нашей организации.
+
+Почитать подробнее про `resolv.conf` можно [тут][3].
+:::
+
+>> 2.3 Конфигурация сети в сторону офиса BR
+::: details
+::: info
+Для конфигурации сети на машине BR-RTR будут использоваться следующие обозначения:
+
+* `ens18` - интерфейс в сторону ISP
+* `ens19` - интерфейс в сторону BR-SRV
+:::
+
+Производим конфигурацию сети ISP-BR по аналогии с конфигурацией сети ISP-HQ.
+
+```txt:line-numbers {3-7}
+>> ISP
+>> /etc/net/ifaces/ens20/options
+TYPE=eth
+CONFIG_IPV4=yes
+CONFIG_WIRELESS=no
+DISABLED=no
+BOOTPROTO=static
+```
+
+```   txt:line-numbers {3}
+>> ISP
+>> /etc/net/ifaces/ens20/ipv4address
+172.16.2.1/28
+```
+
+---
+
+```txt:line-numbers {3-7}
+>> BR-RTR
+>> /etc/net/ifaces/ens18/options
+TYPE=eth
+CONFIG_IPV4=yes
+CONFIG_WIRELESS=no
+DISABLED=no
+BOOTPROTO=static
+```
+
+```txt:line-numbers {3}
+>> BR-RTR
+>> /etc/net/ifaces/ens18/ipv4address
+172.16.2.2/28
+```
+
+```txt:line-numbers {3}
+>> BR-RTR
+>> /etc/net/ifaces/ens18/ipv4route
+default via 172.16.2.1
+```
+
+```text:line-numbers {3}
+>> BR-RTR
+>> /etc/net/ifaces/ens18/resolv.conf
+nameserver 77.88.8.8
+```
+
+>> 2.4 Конфигурация Masquerade на ISP
+
+Для конфигурации DNAT на ISP нам потребуется межсетевой экран.
+В рамках руководства будем использовать iptables. Для выполнения заданий его возможностей нам хватит с головой.
+
+Ставим пакет iptables
+
+```shell
+apt-get update && apt-get install iptables
+```
+
+Создаём правило DNAT в таблице `nat`, цепочке `POSTROUTING` для интерфейса `ens18`.
+
+```shell
+iptables -t nat -A POSTROUTING -o ens18 -j MASQUERADE
+```
+
+Ввиду того, что по-умолчанию iptables хранит правила только в оперативной памяти,
+их необходимо вручную сохранить и добавить в автозагрузку демон, применяющий их при запуске ОС.
+
+Сохраняем правила iptables в файл по пути `/etc/sysconfig/iptables`
+
+```shell
+iptables-save > /etc/sysconfig/iptables
+```
+
+Добавляем демон `iptables` в автозагрузку нашей системы инициализации.
+
+```shell
+systemctl enable iptables
+```
+
+>> 2.5 Проверяем сетевую связанность
+
+Если конфигурация сетевых устройств в сетях ISP-HQ и ISP-BR выполнена корректно,
+каждая машина должна успешно "пинговать" каждого участника сети.
+
+К примеру, пошлём несколько ICMP пакетов с хоста HQ-RTR на хост BR-RTR
+
+```shell
+>> HQ-RTR
+ping 172.16.2.1
+```
+
+Если пинг идёт, поздравляю - сетевая связанность присутствует.
+
+---
+
+Так же, все 3 машины должны иметь доступ к репозиториям дистрибутива.
+
+Проверить это очень легко - достаточно просто попробовать синхронизировать список пакетов
+
+```shell
+apt-get update
+```
+
+[1]: 
+[2]: 
+[3]:
+
+--- wiki/module1/task1-3.md ---
+>> 3. Создание локальных учётных записей
+
+>> 3.1 Создайте локальные учетные записи на серверах HQ-SRV и BR-SRV
+:::details
+* Создайте пользователя sshuser
+
+* Пароль пользователя sshuser с паролем P@ssw0rd
+
+* Идентификатор пользователя 2026
+
+* Пользователь sshuser должен иметь возможность запускать sudo без
+ввода пароля
+:::
+
+```shell
+useradd sshuser -u 2026
+```
+
+Указываем для свежесозданного пользователя пароль следуя заданию.
+
+```shell
+passwd sshuser
+```
+
+::: info
+Просто дважды вводим пароль P@ssw0rd. Он не будет отображаться при вводе из соображений безопасности, но сами символы корректно вводятся.
+:::
+
+Редактируем файл `/etc/sudoers`. Необходимо разрешить использование sudo для самого себя (root) и группе
+wheel.
+
+```text:line-numbers=115 {3,9}
+>> User privilege specification
+>> # root ALL=(ALL:ALL) ALL # раскомментировать тут
+
+>> Uncomment to allow members of group wheel to execute any command
+>> WHEEL_USERS ALL=(ALL:ALL) ALL
+
+>> Same thing without a password
+>> WHEEL_USERS ALL=(ALL:ALL) NOPASSWD: ALL # и тут
+
+>> Uncomment to allow members of group sudo to execute any command
+>> SUDO_USERS ALL=(ALL:ALL) ALL
+```
+
+Добавляем sshuser в группу wheel дабы наделить его возможностями суперпользователя.
+
+```shell
+usermod sshuser -aG wheel
+```
+
+>> 3.2 Создайте пользователя net_admin на маршрутизаторах HQ-RTR и BR-RTR
+
+::: details
+* Создайте пользователя net_admin на маршрутизаторах HQ-RTR и BR-RTR
+
+* Пароль пользователя net_admin с паролем P@ssw0rd
+
+  Пользователь net_admin должен иметь возможность запускать sudo без
+ввода пароля
+:::
+
+Необходимо предустановить sudo. В стандартной поставке ALT JeOS его нет.
+
+```shell
+apt-get update && apt-get install sudo
+```
+
+В остальном - действия аналогичны предыдущему пункту.
+Единственные отличия - другое имя пользователя и отсутствие нужды указывать свой UID при его (пользователя) создании.
+
+```shell
+sudo useradd net_admin
+passwd net_admin
+>> ...
+usermod net_admin -aG wheel
+```
+
+>> 3.3 Проверка работоспособности
+
+Удостовериться в корректном выполнении задания очень просто.
+У нас должна быть возможность спокойно залогиниться под созданным пользователем и выполнить от его лица что угодно с повышением привилегий.
+
+За пример возьмём хост HQ-SRV и юзера sshuser.
+
+```shell
+sudo -iu sshuser
+sudo whoami
+```
+
+Если пользователь сменился, и повышение привилегий от его имени прошло успешно не запросив ввода пароля - конфигурация выполнена верно.
+
+--- wiki/module1/task1-4.md ---
+>> 4. Настройте коммутацию в сегменте HQ следующим образом:
+
+Настройте адресацию на интерфейсах
+
+::: details
+* Трафик HQ-SRV должен принадлежать VLAN 100
+
+* Трафик HQ-CLI должен принадлежать VLAN 200
+
+* Предусмотреть возможность передачи трафика управления в VLAN 999
+
+* Реализовать на HQ-RTR маршрутизацию трафика всех указанных VLAN 
+с использованием одного сетевого адаптера ВМ/физического порта
+* Сведения о настройке коммутации внесите в отчёт
+:::
+
+В рамках руководства, будем придерживаться [этой таблицы адресации][1], чего и вам советуем, если вы слепо следуете руководству и не понимаете что делаете!
+
+>> 4.1 Настройка Open vSwitch
+
+Устанавливаем пакет `openvswitch` на HQ-RTR.
+
+```shell
+apt-get install openvswitch
+```
+
+Включаем и добавляем сервис в автозагрузку.
+
+```shell
+systemctl enable --now openvswitch
+```
+
+Для проверки используем:
+
+```shell
+ovs-vsctl show
+```
+
+>> 4.2 Создание VLAN на HQ-RTR
+
+Создаём конфигурационные файлы сетевых интерфейсов для OVS-моста и VLAN'ов на HQ-RTR.
+
+>> Мост br0
+
+```txt:line-numbers {3-5}
+>> HQ-RTR
+>> /etc/net/ifaces/br0/options
+TYPE=ovsbr
+HOST=ens19
+BOOTPROTO=static
+```
+
+>> VLAN 100
+
+```txt:line-numbers {3-7}
+>> HQ-RTR
+>> /etc/net/ifaces/vlan100/options
+TYPE=ovsport
+BRIDGE=br0
+VID=100
+BOOTPROTO=static
+CONFIG_IPV4=yes
+```
+
+```txt:line-numbers {3}
+>> HQ-RTR
+>> /etc/net/ifaces/vlan100/ipv4address
+192.168.100.1/28
+```
+
+>> VLAN 200
+
+```txt:line-numbers {3-7}
+>> HQ-RTR
+>> /etc/net/ifaces/vlan200/options
+TYPE=ovsport
+BRIDGE=br0
+VID=200
+BOOTPROTO=static
+CONFIG_IPV4=yes
+```
+
+```txt:line-numbers {3}
+>> HQ-RTR
+>> /etc/net/ifaces/vlan200/ipv4address
+192.168.200.1/29
+```
+
+>> VLAN 999
+
+```txt:line-numbers {3-7}
+>> HQ-RTR
+>> /etc/net/ifaces/vlan999/options
+TYPE=ovsport
+BRIDGE=br0
+VID=999
+BOOTPROTO=static
+CONFIG_IPV4=yes
+```
+
+```txt:line-numbers {3}
+>> HQ-RTR
+>> /etc/net/ifaces/vlan999/ipv4address
+192.168.99.1/28
+```
+
+Применяем обновлённую сетевую конфигурацию и проверяем, что VLAN'ы создались.
+
+```shell
+systemctl restart network
+```
+
+```shell
+ovs-vsctl show
+```
+
+>> 4.3 Конфигурация клиентских машин HQ-SRV и HQ-CLI
+
+На клиентских машинах HQ-SRV и HQ-CLI настраиваем VLAN-интерфейсы, чтобы трафик попадал в соответствующий VLAN.
+
+>> HQ-SRV
+
+```txt:line-numbers {3-8}
+>> HQ-SRV
+>> /etc/net/ifaces/ens18.100/options
+BOOTPROTO=static
+TYPE=vlan
+VID=100
+HOST=ens18
+CONFIG_IPV4=yes
+DISABLED=no
+```
+
+```txt:line-numbers {3}
+>> HQ-SRV
+>> /etc/net/ifaces/ens18.100/ipv4address
+192.168.100.2/28
+```
+
+```txt:line-numbers {3}
+>> HQ-SRV
+>> /etc/net/ifaces/ens18.100/ipv4route
+default via 192.168.100.1
+```
+
+```txt:line-numbers {3}
+>> HQ-SRV
+>> /etc/net/ifaces/ens18.100/resolv.conf
+nameserver 8.8.8.8
+```
+
+>> HQ-CLI
+
+```txt:line-numbers {3-8}
+>> HQ-CLI
+>> /etc/net/ifaces/ens18.200/options
+BOOTPROTO=static
+TYPE=vlan
+VID=200
+HOST=ens18
+CONFIG_IPV4=yes
+DISABLED=no
+```
+
+```txt:line-numbers {3}
+>> HQ-CLI
+>> /etc/net/ifaces/ens18.200/ipv4address
+192.168.200.2/29
+```
+
+```txt:line-numbers {3}
+>> HQ-CLI
+>> /etc/net/ifaces/ens18.200/ipv4route
+default via 192.168.200.1
+```
+
+```txt:line-numbers {3}
+>> HQ-CLI
+>> /etc/net/ifaces/ens18.200/resolv.conf
+nameserver 8.8.8.8
+```
+
+Применяем конфигурацию на обеих машинах.
+
+```shell
+systemctl restart network
+```
+
+>> 4.4 Проверка работоспособности
+
+Убедиться в корректной работе VLAN'ов можно обычным пингом между машинами.
+
+К примеру, пошлём ICMP пакеты с HQ-SRV на шлюз VLAN 100:
+
+```shell
+>> HQ-SRV
+ping 192.168.100.1
+```
+
+Если пинг идёт - коммутация настроена верно.
+
+Полезные материалы:
+* [https://www.altlinux.org/Etcnet][2]
+* [Etcnet/openvswitch][3]
+
+[1]: 
+[2]: 
+[3]:
+
+--- wiki/module1/task1-5.md ---
+>> 5. Настройте безопасный удалённый доступ на серверах HQ-SRV и BR-SRV:
+
+::: details
+* Для подключения используйте порт 2026
+
+* Разрешите подключения исключительно пользователю sshuser
+
+* Ограничьте количество попыток входа до двух
+
+* Настройте баннер «Authorized access only»
+:::
+
+Устанавливаем SSH-сервер, если он ещё не установлен.
+
+```shell
+apt-get update && apt-get install openssh-server
+```
+
+Все дальнейшие изменения производятся в конфигурационном файле `/etc/openssh/sshd_config` на хостах `HQ-SRV` и `BR-SRV`.
+
+>> 5.1 Настройка порта подключения
+
+Находим строчку `#Port 22`, раскомментируем и изменяем значение на `2026`.
+
+```python:line-numbers
+Port 22 # [!code --]
+Port 2026 # [!code ++]
+```
+
+>> 5.2 Разрешение подключений только для sshuser
+
+Добавляем директиву `AllowUsers` в конец файла `/etc/openssh/sshd_config`.
+
+```txt:line-numbers
+>> HQ-SRV / BR-SRV
+>> /etc/openssh/sshd_config (в конец файла)
+AllowUsers sshuser
+```
+
+::: info
+Директива `AllowUsers` задаёт белый список пользователей, которым разрешено подключение по SSH. Все остальные пользователи будут автоматически отклонены.
+:::
+
+>> 5.3 Ограничение количества попыток входа
+
+Находим строчку `#MaxAuthTries 6`, раскомментируем и изменяем значение на `2`.
+
+```python:line-numbers
+MaxAuthTries 6 # [!code --]
+MaxAuthTries 2 # [!code ++]
+```
+
+>> 5.4 Настройка баннера «Authorized access only»
+
+Находим строчку `#Banner none`, раскомментируем и указываем путь к файлу с текстом баннера.
+
+```python:line-numbers
+#Banner none # [!code --]
+Banner /etc/openssh/banner # [!code ++]
+```
+
+Создаём файл баннера с необходимым содержимым.
+
+```shell
+echo "Authorized access only" > /etc/openssh/banner
+```
+
+>> 5.5 Применение и проверка
+
+Перезапускаем сервис SSH для применения изменений.
+
+```shell
+systemctl restart sshd
+```
+
+Для проверки пробуем подключиться с HQ-RTR к HQ-SRV по SSH.
+
+```shell
+>> HQ-RTR
+ssh -p 2026 sshuser@192.168.100.2
+```
+
+Если подключение прошло успешно и вы видите баннер «Authorized access only» — конфигурация выполнена верно.
+
+__Повторите те же действия на машине BR-SRV по аналогии.__
+
+Полезные материалы:
+* [https://www.altlinux.org/SSH][1]
+
+[1]:
+
+--- wiki/module1/task1-6.md ---
+>> 6. Настройте IP-туннель между офисами HQ и BR:
+
+::: details
+* На выбор технологии GRE или IP in IP
+
+* Сведения о туннеле занесите в отчёт
+:::
+
+В рамках руководства будем использовать GRE-туннель для связи офисов HQ и BR.
+
+>> 6.1 Настройка GRE на HQ-RTR
+
+Создаём конфигурационные файлы для GRE-интерфейса на HQ-RTR.
+
+```txt:line-numbers {3-9}
+>> HQ-RTR
+>> /etc/net/ifaces/GRE1/options
+TYPE=iptun
+TUNTYPE=gre
+TUNLOCAL=172.16.1.2
+TUNREMOTE=172.16.2.2
+TUNTTL=64
+TUNOPTIONS='ttl 64'
+```
+
+::: info
+* `TUNLOCAL` — IP-адрес локального интерфейса, через который отправляются пакеты туннеля
+* `TUNREMOTE` — IP-адрес удалённого интерфейса, на который приходят пакеты туннеля
+* `HOST` — имя физического интерфейса, через который проходит туннельный трафик
+:::
+
+```txt:line-numbers {3}
+>> HQ-RTR
+>> /etc/net/ifaces/GRE1/ipv4address
+10.0.0.1/30
+```
+
+>> 6.2 Настройка GRE на BR-RTR
+
+Аналогично создаём конфигурацию GRE-интерфейса на BR-RTR, зеркально поменяв адреса `TUNLOCAL` и `TUNREMOTE`.
+
+```txt:line-numbers {3-9}
+>> BR-RTR
+>> /etc/net/ifaces/GRE1/options
+TYPE=iptun
+TUNTYPE=gre
+TUNLOCAL=172.16.2.2
+TUNREMOTE=172.16.1.2
+TUNTTL=64
+TUNOPTIONS='ttl 64'
+```
+
+```txt:line-numbers {3}
+>> BR-RTR
+>> /etc/net/ifaces/GRE1/ipv4address
+10.0.0.2/30
+```
+
+Применяем сетевую конфигурацию на обеих машинах.
+
+```shell
+systemctl restart network
+```
+
+::: tip
+Маршрутизация трафика между офисами через GRE-туннель будет настроена позднее, в рамках конфигурации динамической маршрутизации.
+:::
+
+>> 6.3 Проверка работоспособности
+
+Убедиться в корректной работе туннеля можно пингом между GRE-интерфейсами.
+
+```shell
+>> HQ-RTR
+ping 10.0.0.2
+```
+
+```shell
+>> BR-RTR
+ping 10.0.0.1
+```
+
+Если пинг идёт — GRE-туннель работает.
+
+Полезные материалы:
+* [Etcnet: настройка IP-туннелей][1]
+
+[1]:
+
+--- wiki/module1/task1-7.md ---
+>> 7. Обеспечьте динамическую маршрутизацию на маршрутизаторах HQ-RTR и BR-RTR:
+
+::: details
+* Разрешите выбранный протокол только на интерфейсах IP-туннеля
+
+* Маршрутизаторы должны делиться маршрутами только друг с другом
+
+* Обеспечьте защиту выбранного протокола посредством парольной
+защиты
+
+* Сведения о настройке и защите протокола занесите в отчёт
+:::
+
+В рамках руководства, будем придерживаться [этой таблицы адресации][1], чего и вам советуем, если вы слепо следуете руководству и не понимаете что делаете!
+
+В качестве протокола динамической маршрутизации будем использовать OSPF, реализованный в пакете FRR.
+
+Устанавливаем FRR на обоих маршрутизаторах.
+
+```shell
+apt-get update && apt-get install frr
+```
+
+>> 7.1 Включение демона OSPF
+
+В файле `/etc/frr/daemons` находим строчку `ospfd=no` и меняем её на `ospfd=yes`.
+
+```python:line-numbers
+ospfd=no # [!code --]
+ospfd=yes # [!code ++]
+```
+
+Включаем и добавляем FRR в автозагрузку.
+
+```shell
+systemctl enable --now frr
+```
+
+>> 7.2 Конфигурация OSPF на HQ-RTR
+
+Заходим в терминал управления FRR.
+
+::: info
+`vtysh` (Virtual TeletYpe SHell) — интерфейс управления FRR, по синтаксису аналогичный Cisco IOS.
+:::
+
+```shell
+vtysh
+```
+
+Выполняем конфигурацию OSPF. Все команды ниже вводятся последовательно в терминале `vtysh`.
+
+```txt:line-numbers
+conf t
+
+int ens18
+  ip ospf passive
+exit
+
+int ens19
+  ip ospf passive
+exit
+
+router ospf
+ ospf router-id 1.1.1.1
+ network 10.0.0.0/30 area 0
+ network 192.168.100.0/28 area 0
+ network 192.168.200.0/28 area 0
+ network 192.168.99.0/29 area 0
+exit
+
+int GRE1
+ ip ospf network point-to-point
+ ip ospf authentication message-digest
+ ip ospf message-digest-key 1 md5 P@ssw0rd
+exit
+
+do wr
+end
+exit
+```
+
+::: info
+* `ip ospf passive` — запрещает отправку OSPF-пакетов на указанном интерфейсе, при этом сеть интерфейса всё равно анонсируется
+* `ip ospf network point-to-point` — задаёт тип сети point-to-point на GRE-интерфейсе, что ускоряет установление соседства
+* `ip ospf authentication message-digest` — включает MD5-аутентификацию на интерфейсе для защиты протокола
+:::
+
+>> 7.3 Конфигурация OSPF на BR-RTR
+
+Аналогично заходим в `vtysh` на BR-RTR и выполняем конфигурацию.
+
+```shell
+vtysh
+```
+
+```txt:line-numbers
+conf t
+
+int ens18
+  ip ospf passive
+exit
+
+int ens19
+  ip ospf passive
+exit
+
+router ospf
+ ospf router-id 2.2.2.2
+ network 10.0.0.0/30 area 0
+ network 192.168.3.0/28 area 0
+exit
+
+int GRE1
+ ip ospf network point-to-point
+ ip ospf authentication message-digest
+ ip ospf message-digest-key 1 md5 P@ssw0rd
+exit
+
+do wr
+end
+exit
+```
+
+::: warning
+Пароль аутентификации (`message-digest-key`) должен совпадать на обоих маршрутизаторах, иначе OSPF-соседство не установится.
+:::
+
+>> 7.4 Проверка работоспособности
+
+Для проверки конфигурации и состояния OSPF используем команды в `vtysh`:
+
+```shell
+>> Просмотр текущей конфигурации
+vtysh -c "show running-config"
+```
+
+```shell
+>> Просмотр OSPF-соседей
+vtysh -c "show ip ospf neighbor"
+```
+
+```shell
+>> Просмотр таблицы маршрутизации
+vtysh -c "show ip route"
+```
+
+Если в выводе `show ip ospf neighbor` отображается сосед в состоянии `Full` — OSPF-соседство установлено, маршрутизация работает.
+
+[1]:
+
+--- wiki/module1/task1-8.md ---
+>> 8. Настройка динамической трансляции адресов на маршрутизаторах HQ-RTR и BR-RTR:
+
+::: details
+* Настройте динамическую трансляцию адресов для обоих офисов в
+сторону ISP, все устройства в офисах должны иметь доступ к сети
+Интернет
+:::
+
+Для трансляции адресов (NAT) будем использовать iptables, как и ранее на ISP.
+
+Устанавливаем iptables на обоих маршрутизаторах.
+
+```shell
+apt-get install iptables
+```
+
+Создаём правило MASQUERADE в таблице `nat`, цепочке `POSTROUTING` для интерфейса в сторону ISP.
+
+```shell
+iptables -t nat -A POSTROUTING -o ens18 -j MASQUERADE
+```
+
+Сохраняем правила iptables в файл.
+
+```shell
+iptables-save > /etc/sysconfig/iptables
+```
+
+::: warning
+Используйте `>` (перезапись), а не `>>` (дозапись). При использовании `>>` правила будут дублироваться при каждом сохранении.
+:::
+
+Добавляем демон `iptables` в автозагрузку.
+
+```shell
+systemctl enable iptables
+```
+
+__Повторите те же действия на обоих маршрутизаторах — HQ-RTR и BR-RTR.__
+
+>> 8.1 Проверка работоспособности
+
+После настройки NAT все машины в обоих офисах должны иметь доступ в интернет.
+
+Проверяем доступность репозиториев с любой клиентской машины, например HQ-SRV:
+
+```shell
+>> HQ-SRV
+apt-get update
+```
+
+Если список пакетов успешно обновился — NAT работает корректно.
+
+--- wiki/module1/task1-9.md ---
+>> 9. Настройте протокол динамической конфигурации хостов для сети в сторону HQ-CLI:
+
+::: details
+* Настройте нужную подсеть
+
+* В качестве сервера DHCP выступает маршрутизатор HQ-RTR
+
+* Клиентом является машина HQ-CLI
+
+* Исключите из выдачи адрес маршрутизатора
+
+* Адрес шлюза по умолчанию – адрес маршрутизатора HQ-RTR
+
+* Адрес DNS-сервера для машины HQ-CLI – адрес сервера HQ-SRV
+
+* DNS-суффикс – au-team.irpo
+
+* Сведения о настройке протокола занесите в отчёт
+:::
+
+В рамках руководства, будем придерживаться [этой таблицы адресации][1], чего и вам советуем, если вы слепо следуете руководству и не понимаете что делаете!
+
+Устанавливаем DHCP-сервер на HQ-RTR.
+
+```shell
+apt-get install dhcp-server
+```
+
+>> 9.1 Конфигурация DHCP-сервера на HQ-RTR
+
+Редактируем конфигурационный файл `/etc/dhcp/dhcpd.conf`. За основу можно взять пример из `/etc/dhcp/dhcpd.conf.sample`.
+
+```txt:line-numbers {3-12}
+>> HQ-RTR
+>> /etc/dhcp/dhcpd.conf
+subnet 192.168.200.0 netmask 255.255.255.248 {
+    option routers 192.168.200.1;
+    option subnet-mask 255.255.255.248;
+    option domain-name "au-team.irpo";
+    option domain-name-servers 192.168.100.2;
+    range dynamic-bootp 192.168.200.2 192.168.200.6;
+}
+```
+
+::: info
+* `option routers` — адрес шлюза по умолчанию (HQ-RTR)
+* `option domain-name-servers` — адрес DNS-сервера (HQ-SRV)
+* `option domain-name` — DNS-суффикс
+* `range` — диапазон выдаваемых адресов. Адрес маршрутизатора (`192.168.200.1`) исключён из диапазона
+:::
+
+Перезапускаем и добавляем в автозагрузку службу DHCP.
+
+```shell
+systemctl enable --now dhcpd
+```
+
+>> 9.2 Настройка DHCP-клиента на HQ-CLI
+
+На машине HQ-CLI меняем тип получения адреса с `static` на `dhcp` в конфигурации VLAN-интерфейса.
+
+```txt:line-numbers {3-8}
+>> HQ-CLI
+>> /etc/net/ifaces/ens18.200/options
+BOOTPROTO=dhcp
+TYPE=vlan
+VID=200
+HOST=ens18
+CONFIG_IPV4=yes
+DISABLED=no
+```
+
+::: tip
+Файлы `ipv4address` и `ipv4route` для интерфейса `ens18.200` на HQ-CLI больше не нужны — адрес, шлюз и DNS теперь выдаются по DHCP. Их можно удалить.
+:::
+
+Перезапускаем сетевую службу.
+
+```shell
+systemctl restart network
+```
+
+>> 9.3 Проверка работоспособности
+
+Проверяем, что HQ-CLI получил адрес по DHCP.
+
+```shell
+>> HQ-CLI
+ip a show ens18.200
+```
+
+Если интерфейс получил адрес из диапазона `192.168.200.2–192.168.200.6` — DHCP работает корректно.
+
+[1]:
+
+
+=== МОДУЛЬ 2 ===
+
+--- wiki/module2/task2-1.md ---
+>> Настройте контроллер домена Samba DC на сервере BR-SRV:
+
+::: details Задания
+
+* Имя домена au-team.irpo
+
+* Введите в созданный домен машину HQ-CLI
+
+* Создайте 5 пользователей для офиса HQ: имена пользователей формата hquser№ (например hquser1, hquser2 и т.д.)
+
+* Создайте группу hq, введите в группу созданных пользователей
+
+* Убедитесь, что пользователи группы hq имеют право аутентифицироваться на HQ-CLI
+
+* Пользователи группы hq должны иметь возможность повышать
+привилегии для выполнения ограниченного набора команд: cat, grep, id.
+Запускать другие команды с повышенными привилегиями пользователи
+группы права не имеют.
+
+:::
+>> 1. Запуск и первичная настройка Samba на BR-SRV
+
+Устанавливаем Samba
+
+```python:line-numbers
+apt-get install task-samba-dc -y
+```
+Прописываем следующие команды:
+```python
+rm -f  /etc/samba/smb.conf
+rm -rf /var/lib/samba/
+rm -rf /var/cache/samba/
+mkdir -p /var/lib/samba/sysvol
+```
+
+Перед запуском обязательно меняем DNS
+`/etc/net/ifaces/ens18/resolv.conf`
+```Shell
+search au-team.irpo
+nameserver 127.0.0.1
+```
+
+Запускаем программу настройки
+
+```
+samba-tool domain provision
+```
+
+Псоле этого программа будет просить ввести параметры
+
+```
+Realm: au-team.irpo
+```
+
+Далее пропускаем всё с помощью Enter, кроме строчки с параметром DNS forwarder и паролем
+
+```
+Domain [au-team]:
+
+Server Role (dc, member, standalone) [dc]:
+
+DNS backend (SAMBA_INTERNAL, BIND9_FLATFILE, BIND9_DLZ, NONE) [SAMBA_INTERNAL]:
+```
+в строчке DNS forwarder прописываем адресс любого публичного DNS сервера(1.1.1.1: 8.8.8.8; 77.88.8.8)
+```
+DNS forwarder IP address (write 'none' to disable forwarding) [127.0.0.1]: адрес любого DNS
+```
+когда доходит до ввода пароля, вписываем P@ssw0rd два раза
+
+далее настраиваем kerberos
+```Shell
+cp /var/lib/samba/private/krb5.conf /etc/krb5.conf
+
+overwrite: y
+```
+
+Ставим программу на автозапуск и запускаем
+
+```
+ systemctl enable --now samba
+```
+
+cоздаём группу пользователей hq
+
+```Shell
+samba-tool group add hq
+```
+
+создаём и добавляем пользователей в группу 
+
+скрипт для автоматического создания
+```Shell
+for i in {1..5}; do
+>samba-tool user add hquser$i P@ssw0rd;
+>samba-tool user setexpiry hquser$i --noexpiry;
+>samba-tool group addmembers "hq" hquser$i;
+>done
+
+если при создании пользователей не будет никаких ошибок то вы все прописали правильно
+проверить можно с помощью команд:
+
+```Shell
+samba-tool group listmembers hq
+kinit Administrator
+klist
+```
+
+Далее в hq-rtr заходим в конфигурационный файл `/etc/dhcp/dhcpd.conf`
+меняем здесь:
+```python:line-numbers
+>> See dhcpd.conf(5) for further configuration
+
+ddns-update-style none;
+
+subnet 192.168.200.0 netmask 255.255.255.240 {
+    option routers                  192.168.200.1;
+    option subnet-mask              255.255.255.240;
+
+    option nis-domain               "domain.org";
+    option domain-name              "au-team.irpo";
+    option domain-name-servers      192.168.100.2; # [!code --]
+    option domain-name-servers      192.168.3.2; # [!code ++]
+
+    range dynamic-bootp 192.168.200.2 192.168.200.7;
+    default-lease-time 21600;
+    max-lease-time 43200;
+}
+```
+
+Чтобы настройки применились перезапускаем службу dhcpd
+
+```Shell
+systemctl restart dhcpd
+```
+
+>> 2. Введение в созданный домен машину HQ-CLI
+
+соответственно для того чтобы HQ-CLI нашла контроллер домена, нужно перезапустить службу network
+
+```Shell
+systemctl restart network
+```
+Далее:
+
+Заходим на HQ-CLI --> Меню(снизу слева) --> Раздел Приложения --> Администрирование --> Центр управления системой --> Раздел Пользователи --> Аутентификация
+
+Выбираем пункт Домен Active Directory
+
+Вводим au-team.irpo в поле Домен
+
+Листаем вниз и нажимаем применить
+
+далее нужно прописать права для пользователей группы hq
+```Shell
+roleadd hq wheel
+```
+
+далее заходим в файл по пути nano /etc/sudoers.d/hq
+
+вставляем в этот файл
+```Shell
+Cmnd_Alias SHELLCMD = /bin/cat, /bin/grep, /usr/bin/id  
+  
+WHEEL_USERS ALL=(ALL:ALL) SHELLCMD
+```
+на этом конфигурация samba ⚡⚡⚡ВСЁ⚡⚡⚡
+
+--- wiki/module2/task2-10.md ---
+>> 10.На маршрутизаторе ISP настройте web-based аутентификацию:
+
+• При обращении к сайту web.au-team.irpo клиенту должно быть
+предложено ввести аутентификационные данные
+
+• В качестве логина для аутентификации выберите WEBс паролем
+P@ssw0rd
+
+• Выберите файл /etc/nginx/.htpasswd в качестве хранилища учётных
+записей
+
+• При успешной аутентификации клиент должен перейти на веб
+сайт.
+
+скачиваем пакет apache2-htpasswd
+```Shell
+apt-get install apache2-htpasswd
+```
+
+```Shell
+htpasswd -c /etc/nginx/.htpasswd WEB
+```
+вписываем пароль P@ssw0rd 2 раза
+далее заходим в файл `/etc/nginx/sites-available.d/default.conf`
+добавляем
+```python:line-numbers
+server {
+    listen 80;
+    server_name web.au-team.irpo;
+    location / {
+        proxy_pass http://172.16.1.2:8080;
+        auth_basic "Restructed area"; # [!code ++]
+        auth_basic_user_file /etc/nginx/.htpasswd; # [!code ++]
+    }
+}
+
+server {
+    listen 80;
+    server_name docker.au-team.irpo;
+    location / {
+        proxy_pass http://172.16.2.2:8080;
+    }
+}
+```
+Перезапускаем службу
+
+```Shell
+systemctl restart nginx
+```
+
+Далее заходим на HQ-CLI и пытаемся зайти на сайт web.au-team.irpo
+Если у нас выходит АЧЬКО аутентификации значит все сделано верно, пробуем ввести
+WEB
+P@ssw0rd
+
+и успешно авторизуемся
+
+--- wiki/module2/task2-11.md ---
+>> 11.Удобным способом установите приложение Яндекс Браузер на HQ-CLI
+• Установку браузера отметьте в отчёте.
+  
+```
+apt-get install yandex-browser
+```
+
+--- wiki/module2/task2-2.md ---
+>> 2. Сконфигурируйте файловое хранилище на сервере HQ-SRV:
+
+::: details Задания
+
+• При помощи двух подключенных к серверу дополнительных дисков
+размером 1 Гб сконфигурируйте дисковый массив уровня 0
+
+• Имя устройства – md0, при необходимости конфигурация массива
+размещается в файле /etc/mdadm.conf
+
+• Создайте раздел, отформатируйте раздел, в качестве файловой системы
+используйте ext4
+
+• Обеспечьте автоматическое монтирование в папку /raid
+
+:::
+
+>> 0. Немного советов
+
+lsblk(расшифровывается как «list block devices» — «список блочных устройств») -
+выводит диски в системе и их точки монтирования
+
+Прописав команду mount -a, можно проверить правильно ли написан fstab 
+
+если вы тренируетесь вам необходимо пробросить диски самостоятельно для машины HQ-SRV
+
+>> 1. Конфиигурация файловое хранилище
+
+Устанавливаем mdadm (от англ. multiple devices driver)
+
+```
+apt-get install –y mdadm
+```
+Создаём массив
+
+```
+mdadm --create /dev/md0 –l 0 –n 2 /dev/sdb /dev/sdc
+```
+
+Где:
+
+/dev/md0 - название для логического девайса рейда
+
+-l 0 – уровень RAID;
+
+-n 2 – количество дисков, из которых собирается массив;
+
+/dev/sdb /dev/sdc - диски для рейда
+Далее прописываем
+```
+mdadm --detail --scan --verbose | tee -a /etc/mdadm.conf
+```
+
+Форматируем раздел
+
+```
+mkfs.ext4 /dev/md0
+```
+Редакируем файл /etc/fstab, прописывае следущее:
+
+```
+/dev/md0    /raid    ext4    defaults    0    0
+```
+Создаём директорию
+
+```
+mkdir /raid
+```
+```
+mount -av
+```
+командой
+```
+lsblk
+```
+
+проверяем ушли ли наши диски в рейд
+
+--- wiki/module2/task2-3.md ---
+>> 3. Настройте сервер сетевой файловой системы (nfs) на HQ-SRV:
+
+::: details Задания
+
+• В качестве папки общего доступа выберите /raid/nfs, доступ для чтения
+и записи исключительно для сети в сторону HQ-CLI
+
+• На HQ-CLI настройте автомонтирование в папку /mnt/nfs
+
+• Основные параметры сервера отметьте в отчёте
+
+::: 
+
+МАШИНА HQ-SRV
+
+```Shell
+apt-get install nfs-server -y
+```
+```Shell
+mkdir /raid/nfs
+chmod -R 777 /raid/nfs
+```
+Открываем файл `/etc/exports` и пишем в нем:
+
+```
+/raid/nfs 192.168.200.0/28(rw)
+```
+```Shell
+exportfs -arv
+systemctl enable --now nfs-server
+```
+
+Переходим на HQ-CLI
+
+Прописываем в терминале
+
+```Shell
+mkdir /mnt/nfs
+chmod -R 777 /mnt/nfs
+```
+
+Далее заходим в файл /etc/fstab
+прописываем в новой строчке
+
+```txt
+192.168.100.2:/raid/nfs /mnt/nfs nfs defaults 0 0
+```
+
+Перемонтируем все блочные устройства
+
+```shell
+mount -av
+```
+
+после этого можем проверить подключился ли диск командой
+```
+df -h
+```
+В списке должно отобразиться хранилище с ip-адресом 192.168.100.2
+
+--- wiki/module2/task2-4.md ---
+>> 4. Настройте службу сетевого времени на базе сервиса chrony на маршрутизаторе ISP:
+
+::: details Задания
+
+• Вышестоящий сервер ntp на маршрутизаторе ISP - на выбор участника
+
+• Стратум сервера - 5
+
+• В качестве клиентов ntp настройте: HQ-SRV, HQ-CLI, BR-RTR, BR-SRV.
+
+::: 
+
+>> 1. Настройка сервера 
+Открываем файл /etc/chrony.conf на машине ISP
+
+скачиваем
+
+```Shell
+apt-get install chrony -y
+```
+
+переходим в файл `/etc/chrony.conf`
+
+Меняет строчки
+
+```python:line-numbers
+local stratum 10 # [!code --]
+local stratum 5 # [!code ++]
+```
+Коментируем
+
+```python:line-numbers
+pool pool.ntp.org iburst # [!code --]
+#pool pool.ntp.org iburst # [!code ++]
+```
+
+После чего добавляем строчки:
+
+```
+server ntp0.ntp-servers.net iburst prefer minstratum 4
+allow 0.0.0.0/0
+```
+
+Перезагружаем chronyd
+
+```
+systemctl restart chronyd
+```
+
+>> 2. Настройка машин
+
+прописываем на всех машинах
+
+```python:line-numbers
+apt-get update && apt-get install chrony -y
+```
+
+редактируем  /etc/chrony.conf
+
+Комментируем
+
+```python:line-numbers
+pool pool.ntp.org iburst # [!code --]
+#pool pool.ntp.org iburst # [!code ++]
+```
+Добавляем строки
+
+```python:line-numbers
+server 172.16.1.1 iburst
+```
+
+Перезагружаем chronyd
+
+```python:line-numbers
+systemctl restart chronyd
+```
+
+Для машин BR-RTR BR-SRV сервер будет 172.16.2.1 Для HQ-SRV HQ-CLI HQ-RTR сервер будет 172.16.1.1 соответственно
+
+>> 3. Проверка
+
+На клиенте при команде chronyc sources должно выводить ip адрес ISP
+
+На сервере при команде chronyc clients должно выводить ip адреса всех обоих RTR
+
+--- wiki/module2/task2-5.md ---
+>> 5. Сконфигурируйте ansible на сервере BR-SRV:
+
+• Сформируйте файл инвентаря, в инвентарь должны входить HQ-SRV,
+HQ-CLI, HQ-RTR и BR-RTR
+
+• Рабочий каталог ansible должен располагаться в /etc/ansible
+
+• Все указанные машины должны без предупреждений и ошибок отвечать
+pong на команду ping в ansible посланную с BR-SRV.
+
+>> 1. Необходимо установить пакет ansible и sshpass, выполнить это можно следующей командой:
+
+```
+apt-get update && apt-get install –y ansible sshpass
+```
+
+>> 2. Приведем файл инвентаря Ansible к следующему виду, отредактировав конфигурационный файл по пути /etc/ansible/hosts любым удобным текстовым редактором, например vim или nano:
+
+```
+br-rtr ansible_ssh_host=192.168.1.1 ansible_ssh_user=net_admin ansible_ssh_pass=P@ssword
+hq-rtr ansible_ssh_host=172.16.1.2 ansible_ssh_user=net_admin ansible_ssh_pass=P@ssword
+hq-srv ansible_ssh_host=192.168.100.2 ansible_ssh_user=sshuser ansible_ssh_pass=P@ssword ansible_ssh_port=2026
+hq-cli ansible_ssh_host=192.168.200.2 ansible_ssh_user=Administrator@au-team.irpo ansible_ssh_pass=P@ssword
+```
+
+>> 2.1 Редактируем файл /etc/ansible/ansible.cfg, чтобы отключить проверку ключа хоста при подключении по SSH:
+
+Находим строчку "host_key_checking = False" и раскоментируем ёё
+
+```
+#host_key_checking = False >> host_key_checking = False
+```
+
+>> 2.2 Как проверить?:
+
+```
+ansible all -m ping
+```
+
+Если у вас выводит кучу красного текста, необходимо перезапустить ssh на всех машинках котроые указаны в ansible.cfg
+
+```
+systemctl restart sshd
+```
+
+также стоит проверить правильность написание хостов, 
+при пинге будет понятно с каким хостом у вас проблемы, 
+идите дальше только когда на каждые 4 пинга получите в ответ "понг"
+
+>> 5.1
+
+Доп материалы:
+~~~~
+https://labex.io/ru/tutorials/ansible-ansible-installation-on-ubuntu-67172
+~~~~
+
+--- wiki/module2/task2-6.md ---
+>> 6. Разверните веб приложение в docker на сервере BR-SRV:
+
+• Средствами docker должен создаваться стек контейнеров с веб
+приложением и базой данных
+
+• Используйте образы site_latestи mariadb_latestрасполагающиеся в
+директории docker в образе Additional.iso
+
+• Основной контейнер testapp должен называться tespapp
+
+• Контейнер с базой данных должен называться db
+
+• Импортируйте образы в docker, укажите в yaml файле параметры
+подключения к СУБД, имя БД - testdb, пользователь testс паролем
+P@ssw0rd, порт приложения 8080, при необходимости другие
+параметры
+
+• Приложение должно быть доступно для внешних подключений через
+порт 8080
+
+::: info
+Чтобы выполнить это задание вам необходимо пробросить iso образ Aditional в машину BR-SRV
+:::
+Устанавливаем нужные пакеты:
+
+```Shell
+apt-get update && apt-get install docker-engine docker-compose -y
+```
+
+```Shell
+systemctl enable --now docker
+```
+Далее нам необходимо смонтировать нужные образы для дальнейшей загрузки в docker
+
+```Shell
+mount /dev/sr0 /mnt/
+
+docker load -i /mnt/docker/site_latest.tar
+docker load -i /mnt/docker/mariadb_latest.tar
+```
+Проверить успешность загрузки можно посредством выполнения команды
+
+```Shell
+docker images
+```
+Создаем файл по пути /root/compose.yaml
+
+::: info
+Учтите что docker не простит вам если вы не будете соблюдать табуляцию
+:::
+```txt:line-numbers
+services:
+  database:
+    container_name: db
+    image: mariadb:10.11
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MARIADB_DATABASE: testdb
+      MARIADB_USER: test
+      MARIADB_PASSWORD: P@ssw0rd
+      MARIADB_ROOT_PASSWORD: root
+#на пользователях ДЭ пароль будет другой учитывайте это а не слепо копируйте
+  app:
+    container_name: tespapp
+#название контейнера правильное, в задании написано, что основной контейнер testapp должен называться tespapp
+#при дальнейшей настройки docker это может ввести вас в заблуждение
+    image: site:latest
+    restart: always
+    ports:
+      - "8080:8000"
+    environment:
+      DB_TYPE: maria
+      DB_HOST: database
+      DB_PORT: 3306
+      DB_NAME: testdb
+      DB_USER: test
+      DB_PASS: P@ssw0rd
+    depends_on:
+      - database
+```
+
+Прописываем команду
+```python
+docker compose -f /root/compose.yaml up -d
+```
+
+если у вас вышли какие то ошибки, скорее всего они связанны с конфигом, в этом вам может помочь команды
+```Shell
+docker logs -f tespapp
+```
+Далее смотрим команду docker compose ps, важно, чтобы в столбе PORTS не было пусто, если у вас ничего нет а контейнеры уходят в restart, значит, у вас ошибка конфигурации
+
+Идем на машину HQ-CLI и вписываем в адресную строку браузера 192.168.3.2:8080
+
+Если у вас появился сайт, значит вы прекрасны
+
+Если не сработало, выключаете все контейнеры 
+```Shell
+docker compose -f /root/compose.yaml down
+```
+Очищяйте базы 
+```Shell
+docker volume prune
+```
+После этого можите переписывать compose.yaml и заново запускать
+
+--- wiki/module2/task2-7.md ---
+>> 7. Разверните веб приложение на сервере HQ-SRV:
+
+• Используйте веб-сервер apache
+
+• В качестве системы управления базами данных используйте mariadb
+
+• Файлы веб приложения и дамп базы данных находятся в директории web
+образа Additional.iso
+
+• Выполните импорт схемы и данных из файла dump.sql в базу данных
+webdb
+
+• Создайте пользователя webс паролем P@ssw0rd и предоставьте ему
+права доступа к этой базе данных
+
+• Файлы index.php и директорию images скопируйте в каталог веб сервера
+apache
+
+• В файле index.php укажите правильные учётные данные для
+подключения к БД
+
+• Запустите веб сервер и убедитесь в работоспособности приложения
+
+• Основные параметры отметьте в отчёте
+
+::: info
+для этого задание необходимо также пробросить образ Additional.iso, но уже на машину HQ-SRV
+:::
+
+```Shell
+apt-get install lamp-server -y
+```
+Если у вас какие-то проблемы с установкой пакетов, необходимо прописать команду apt-get update
+
+Монтируем образ
+```Shell
+mount /dev/sr0 /mnt/
+
+cp /mnt/web/index.php /var/www/html/
+cp /mnt/web/logo.png /var/www/html/
+```
+
+Заходим в файл `/var/www/html/index.php`
+и изменяем параметры:
+```txt:line-numbers
+$servername = "localhost";
+$username = "webc";
+$password = "P@ssw0rd";
+$dbname = "webdb";
+```
+```Shell
+systemctl enable --now mariadb
+
+mariadb -u root
+```
+
+В появившемся поочередно прописываем:
+```Shell
+CREATE DATABASE webdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE USER 'webc'@'localhost' IDENTIFIED BY 'P@ssw0rd';
+
+GRANT ALL PRIVILEGES ON webdb.* TO 'webc'@'localhost';
+
+FLUSH PRIVILEGES;
+
+EXIT;
+```
+
+Запускаем веб-сервер apache
+
+```Shell
+systemctl enable --now httpd2
+```
+
+```Shell
+mariadb -u webc -p webdb < /mnt/web/dump.sql
+```
+Попросит ввести пароль, если все правильно то никаких ошибок не будет
+
+Далее заходим на машину HQ-CLI и вписываем в адресную строку браузера 192.168.100.2
+
+Появилась еще одна морда? двигаемся дальше
+
+--- wiki/module2/task2-8.md ---
+>> 8. На маршрутизаторах сконфигурируйте статическую трансляцию портов:
+
+• Пробросьте порт 8080в порт приложения testapp BR-SRV на
+маршрутизаторе BR-RTR, для обеспечения работы приложения testapp
+извне
+
+• Пробросьте порт 8080в порт веб приложения на HQ-SRV на
+маршрутизаторе HQ-RTR, для обеспечения работы веб приложения
+извне
+
+• Пробросьте порт 2026на маршрутизаторе HQ-RTR в порт 2026сервера
+HQ-SRV, для подключения к серверу по протоколу ssh из внешних сетей
+
+• Пробросьте порт 2026на маршрутизаторе BR-RTR в порт 2026сервера
+BR-SRV, для подключения к серверу по протоколу ssh из внешних сетей.
+
+Вспоминаем классику
+
+Начнем с машины HQ-RTR
+```Shell
+iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 2026 -j DNAT --to-destination 192.168.100.2:2026
+iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 8080 -j DNAT --to-destination 192.168.100.2:80
+```
+
+Для сохранения правил используем itables-save но уже без перезаписи
+```Shell
+iptables-save >> /etc/sysconfig/iptables
+```
+Машина BR-RTR
+```Shell
+iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 2026 -j DNAT --to-destination 192.168.100.2:2026
+iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 8080 -j DNAT --to-destination 192.168.100.2:8080
+```
+Если вы набедокурили с сохранениями, вписали не ту команду перепутали POSTROUTING с PREROUTING
+Вы всегда можете удалить нужные вам правила, для начала выведем список всех iptables правил:
+```Shell
+iptables -t nat -L -n -v
+```
+Находим по списку ненужные правила и удаляем их
+```Shell
+iptables -t nat -D PREROUTING 1
+```
+после удаления номера сдвигаются так-что будьте аккуратнее
+
+--- wiki/module2/task2-9.md ---
+>> 9. Настройте веб-сервер nginx как обратный прокси-сервер на ISP
+
+• При обращении по доменному имени web.au-team.irpo у клиента должно
+открываться веб приложение на HQ-SRV
+
+• При обращении по доменному имени docker.au-team.irpo клиента
+должно открываться веб приложение testapp
+
+машинка ISP
+```Shell
+apt-get install nginx -y
+```
+
+переходим в файл по пути `/etc/nginx/sites-available.d/default.conf`
+
+вписываем в него
+```txt:line-numbers
+server {
+    listen 80;
+    server_name web.au-team.irpo;
+    location / {
+        proxy_pass http://172.16.1.2:8080;
+    }
+}
+
+server {
+    listen 80;
+    server_name docker.au-team.irpo;
+    location / {
+        proxy_pass http://172.16.2.2:8080;
+    }
+}
+```
+После того как прописали
+
+```Shell
+ln -sf /etc/nginx/sites-available.d/default.conf /etc/nginx/sites-enabled.d/
+```
+
+включаемся
+```Shell
+systemctl enable --now nginx
+```
+
+далее заходим в HQ-CLI
+файл по пути `/etc/hosts`
+в нем прописываем
+
+```txt:line-numbers
+172.16.1.1 web.au-team.irpo
+172.16.2.1 docker.au-team.irpo
+```
+::: info
+Если вы тренируетесь, учтите что в прямой зоне должны быть A-тип записи
+:::
+
+сохраняем файл и вписываем в адресную строку полное доменное имя web и docker, если все удачно то у нас появится морда, но уже не по айпишнику
+
+
+=== МОДУЛЬ 3 ===
+
+--- wiki/module3/task3-1.md ---
+::: warning
+Under construction
+:::
+
+--- wiki/module3/task3-10.md ---
+::: warning
+Under construction
+:::
+
+--- wiki/module3/task3-2.md ---
+::: warning
+Under construction
+:::
+
+--- wiki/module3/task3-3.md ---
+::: warning
+Under construction
+:::
+
+--- wiki/module3/task3-4.md ---
+::: warning
+Under construction
+:::
+
+--- wiki/module3/task3-5.md ---
+::: warning
+Under construction
+:::
+
+--- wiki/module3/task3-6.md ---
+::: warning
+Under construction
+:::
+
+--- wiki/module3/task3-7.md ---
+::: warning
+Under construction
+:::
+
+--- wiki/module3/task3-8.md ---
+::: warning
+Under construction
+:::
+
+--- wiki/module3/task3-9.md ---
+::: warning
+Under construction
+:::
+
+
+=== ПРОЧЕЕ ===
+
+--- wiki/other/about_netmasks.md ---
+>> Ликбез по маскам подсетей
+
+>> Таблица масок
+
+| Маска           | Бинарный вид*                       | Префикс | Количество адресов | Количество хостов($2^n - 2$) | 
+|-----------------|-------------------------------------|---------|--------------------|------------------------------|
+| 255.255.255.254 | `11111111.11111111.11111111.11111110` | /31     | 2                  | 2                            |
+| 255.255.255.252 | `11111111.11111111.11111111.11111100` | /30     | 4                  | 2                            |
+| 255.255.255.248 | `11111111.11111111.11111111.11111000` | /29     | 8                  | 6                            |
+| 255.255.255.240 | `11111111.11111111.11111111.11110000` | /28     | 16                 | 14                           |
+| 255.255.255.224 | `11111111.11111111.11111111.11100000` | /27     | 32                 | 30                           |
+| 255.255.255.192 | `11111111.11111111.11111111.11000000` | /26     | 64                 | 62                           |
+| 255.255.255.128 | `11111111.11111111.11111111.10000000` | /25     | 128                | 126                          |
+| 255.255.255.0   | `11111111.11111111.11111111.00000000` | /24     | 256                | 254                          |
+
+::: info
+Для получения кол-ва хостов, вмещающихся в подсеть, количество нулевых бит из двоичного вида маски мы берём за n и производим вычисление по следующей формуле:
+$2^n - 2$
+
+2 вычитается в связи с тем, что:
+* Первый адрес подсети используется в качестве адреса сети
+* Последний адрес подсети используется в качестве broadcast
+
+Исключение из правила составляют маски /31 и /32 (конкретный хост).
+:::
+
+>> Как выбрать маску по условию задания
+
+В заданиях ДЭ формулировки обычно звучат так: «сеть должна вмещать не более N адресов» или «не менее N адресов».
+
+Алгоритм прост:
+1. Берём требуемое количество хостов из задания
+2. Прибавляем 2 (адрес сети + broadcast)
+3. Находим ближайшую степень двойки, которая >= полученного числа
+4. Это и есть размер нашей подсети. Префикс = 32 − количество нулевых бит
+
+::: tip
+Пример из задания 1.1:
+
+> Локальная сеть в сторону HQ-CLI (VLAN 200) должна вмещать не менее 16 адресов
+
+16 хостов + 2 = 18 → ближайшая степень двойки = 32 → это /27 (32 адреса, 30 хостов)
+
+Но подождите. Нам нужно не менее 16, а /28 даёт ровно 16 адресов (14 хостов). 14 < 16, значит /28 не подходит. Берём /27.
+
+А вот если бы было «не более 16 адресов»: /28 даёт ровно 16 адресов — подходит.
+:::
+
+>> Структура подсети
+
+Для любой подсети структура адресов выглядит так:
+
+| Адрес | Назначение |
+|-------|-----------|
+| Первый адрес диапазона | Адрес сети (нельзя назначать хостам) |
+| Второй адрес → предпоследний | Используемые адреса хостов |
+| Последний адрес диапазона | Broadcast (нельзя назначать хостам) |
+
+::: info
+Пример для сети `192.168.200.0/29` (8 адресов):
+
+| Адрес | Назначение |
+|-------|-----------|
+| `192.168.200.0` | Адрес сети |
+| `192.168.200.1` | Первый используемый (обычно шлюз) |
+| `192.168.200.2` – `192.168.200.6` | Адреса хостов |
+| `192.168.200.7` | Broadcast |
+
+Итого: 6 адресов для хостов из 8 возможных.
+:::
+
+>> Типичные ошибки
+
+::: warning
+Адрес сети ≠ первый используемый адрес
+
+`192.168.100.0/28` — здесь `.0` это адрес сети, а не хоста. Первый используемый адрес — `.1`.
+
+Назначить `.0` хосту физически можно, но это приведёт к непредсказуемому поведению сети.
+:::
+
+::: warning
+«Не более» ≠ «Не менее»
+
+Внимательно читайте формулировку задания. «Не более 32 адресов» означает, что подсеть должна вмещать максимум 32 адреса (берём наименьшую подходящую маску). «Не менее 16 адресов» — подсеть должна вмещать минимум 16 (проверяем, хватает ли нам хостовых адресов).
+:::
+
+--- wiki/other/internet_guide.md ---
+>> Памятка: Настройка сети и траблшутинг
+
+Краткое руководство по базовой настройке сетевых интерфейсов в `etcnet` и решению частых проблем.
+
+>> Траблшутинг (решение проблем)
+
+Для диагностики сетевой связности используйте утилиту `ping`.
+
+```shell
+>> Проверка связи с конкретным IP-адресом
+ping 192.168.100.1
+
+>> Проверка связи по доменному имени
+ping ya.ru
+```
+
+Посмотреть текущие настройки интерфейсов и выданные IP-адреса можно с помощью команды `ip a` (или `ip -c a` для цветного вывода).
+
+::: warning Важно
+После каждого изменения конфигурационных файлов в `/etc/net/ifaces/` необходимо перезапускать сетевую службу:
+
+```shell
+systemctl restart network
+```
+
+Если служба не перезапускается или выдаёт ошибку, проверьте её статус:
+
+```shell
+systemctl status network
+```
+
+или прочитайте логи
+
+```shell
+journalctl -xeu network
+```
+
+подобным образом можно взаимодействовать и с остальными сервисами, лишь заменяя network на название нужного вам сервиса.
+:::
+
+>> Типичные проблемы и их решения:
+
+1. Пингуется IP-адрес в интернете (например, `1.1.1.1` или `8.8.8.8`), но не пингуется доменное имя (`ya.ru`).
+   * Решение: Проверьте настройки DNS-сервера. Скорее всего, отсутствует или неверно настроен файл `resolv.conf` для вашего сетевого интерфейса. Убедитесь, что там указан рабочий DNS-сервер, например, `nameserver 8.8.8.8`.
+
+2. Не пингуется даже внешний IP-адрес (например, `8.8.8.8`).
+   * Решение: Проверьте, пингуется ли шлюз по умолчанию, указанный в файле `ipv4route`. Возможно, вы ошиблись в адресе шлюза или забыли его указать.
+
+3. Пингуется шлюз, но нет доступа в интернет.
+   * Решение: Скорее всего, на маршрутизаторе (шлюзе) не настроена трансляция адресов (NAT/Masquerade) или отключён форвардинг пакетов (`net.ipv4.ip_forward = 1`). Подробнее о настройке NAT можно прочитать в Задании 2.
+
+>> Создание и настройка интерфейсов
+
+Все сетевые интерфейсы в ALT Linux управляются через подсистему `etcnet`. Конфигурация каждого интерфейса хранится в отдельной директории по пути `/etc/net/ifaces/`.
+
+В рамках стенда у вас будет следующая конфигурация интерфейсов:
+* ISP: 3 интерфейса (`ens18`, `ens19`, `ens20`)
+* HQ-RTR и BR-RTR: 2 интерфейса (`ens18`, `ens19`)
+* HQ-SRV, HQ-CLI и BR-SRV: 1 интерфейс (`ens18`)
+
+Чтобы создать конфигурацию для нового интерфейса, можно скопировать существующую директорию или создать её вручную:
+
+```shell
+mkdir /etc/net/ifaces/ens18
+```
+
+>> Настройка динамического (DHCP) адреса
+
+Таким способом настраивается только `ens18` (интерфейс в сторону интернета) на маршрутизаторе ISP.
+
+```txt:line-numbers {3-7}
+>> ISP
+>> /etc/net/ifaces/ens18/options
+BOOTPROTO=dhcp
+TYPE=eth
+CONFIG_IPV4=yes
+CONFIG_WIRELESS=no
+DISABLED=no
+```
+
+Другие файлы (`ipv4address`, `ipv4route`) для DHCP-интерфейса создавать не нужно — все параметры будут получены от сервера провайдера.
+
+>> Настройка статического адреса
+
+Этим способом настраиваются все остальные интерфейсы в нашей топологии. При необходимости создайте нужные файлы: `options`, `ipv4address`, `ipv4route`, `resolv.conf`.
+
+1. Основные параметры (options)
+
+```txt:line-numbers {3-7}
+>> /etc/net/ifaces/ens18/options
+BOOTPROTO=static
+TYPE=eth
+CONFIG_IPV4=yes
+CONFIG_WIRELESS=no
+DISABLED=no
+```
+
+2. IP-адрес и маска (ipv4address)
+
+В этом файле указывается IP-адрес интерфейса вместе с префиксом маски подсети (в формате CIDR).
+
+```txt:line-numbers {2}
+>> /etc/net/ifaces/ens18/ipv4address
+172.16.1.1/28
+```
+
+3. Шлюз по умолчанию (ipv4route)
+
+Здесь указывается IP-адрес маршрутизатора, через который будет идти трафик в другие сети.
+
+```txt:line-numbers {2}
+>> /etc/net/ifaces/ens18/ipv4route
+default via 172.16.1.2
+```
+
+4. DNS-сервер (resolv.conf)
+
+Адрес сервера для разрешения доменных имён. Можно указать публичные серверы (Google, Яндекс) или свой локальный DNS.
+
+```txt:line-numbers {2}
+>> /etc/net/ifaces/ens18/resolv.conf
+nameserver 8.8.8.8
+```
+
+::: tip
+Если вы хотите указать несколько DNS-серверов, просто добавьте дополнительные строки `nameserver ` каждую с новой строки.
+:::
