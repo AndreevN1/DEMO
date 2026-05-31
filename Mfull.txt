@@ -1134,55 +1134,82 @@ apt-get install yandex-browser
 ============================================================
 МОДУЛЬ 3
 
+
 Задание 1. Выполните импорт пользователей в домен au-team.irpo
 
 BR-SRV:
-mount /dev/sr0 /mnt/
 
-# Проверить файл
-wc -l /mnt/Users.csv
-# Должно быть 301 (300 пользователей + шапка)
-
-head -n1 /mnt/Users.csv
-# Поля: First Name;Last Name;Role;Phone;OU;Street;ZIP/Postal Code;City;Country/Region;Password
-
-# Посмотреть уникальные OU (их 5 штук)
-awk -F ';' 'NR>1 {print $5}' /mnt/Users.csv | sort | uniq
-# Cloud storage, IT, Manager, Overal, Supporter
-
-# Создать скрипт импорта
-vim import_user.sh
+mcedit(или vim) import.sh
 
 #!/bin/bash
-csv_file="$1"
 
-# Create OU
-awk -F ';' 'NR>1 {print $5}' "$csv_file" | sort | uniq | while read ou;
-do
-        samba-tool ou add OU="$ou",DC=au-team,DC=irpo;
-done
+mount -o loop /dev/sr0 /mnt
 
-# Create Users
-while IFS=";" read -r firstName lastName role phone ou street zip city country password;
-do
-        if [ "$firstName" == "First Name" ];
-        then
-                continue
-        fi
+FILE="/mnt/Users.csv"
 
-        username="${firstName,,}.${lastName,,}"
+while IFS=";" read -r firstname lastname role phone ou street zip city country password; do
+	password=$(echo "$password" | tr -d '[:space:]') 
+	samba-tool user add "$firstname.$lastname" "$password"
+done < <(tail -n +2 "$FILE")
 
-        samba-tool user add "$username" P@ssw0rd1 \
-                --given-name="$firstName" \
-                --surname="$lastName" \
-                --telephone-number="$phone" \
-                --job-title="$role" \
-                --userou="OU=$ou"
-        samba-tool user setexpiry "$username" --noexpiry
-done < "$csv_file"
+chmod +x import.sh
+./import.sh
 
-# Выдать права на исполнение
-chmod +x import_user.sh
+Задание 5. Настройка сетевой печати (CUPS)
 
-# Запустить скрипт
-./import_user.sh /mnt/Users.csv
+#_______________________________________HQ-SRV__________________________________________
+apt-get update && apt-get install cups cups-pdf -y
+vim /etc/cups/cupsd.conf
+
+Listen 192.168.100.2:631
+
+cupsctl --share-printers --remote-any
+systemctl enable --now cups
+
+systemctl status cups
+
+
+#_______________________________________HQ-CLI__________________________________________
+
+lpadmin -p HQ-PDF -E -v ipp://192.168.100.2/printers/Cups-PDF -m everywhere
+lpadmin -d HQ-PDF
+
+В поиске ввести "Print"(или принтер) > Нажать на "Настройки принтера"(Print Settings) > Далее нажать на HQ-PDF > Print Test Page(Отсканировать тестовую страницу)
+
+
+#_______________________________________HQ-SRV__________________________________________
+
+
+cp /var/spool/cups/d00001-001 /raid/nfs/Print.pdf
+
+chmod 777 /raid/nfs/Print.pdf
+
+#_______________________________________HQ-CLI__________________________________________
+
+На рабочем столе нажать на  домашнюю папку > затем подняться на два уровня (До "/") > Найти /mnt/nft > Проверить PDF на валидность.
+
+Задание 9. Настройка Fail2ban
+
+#_______________________________________HQ-SRV__________________________________________
+
+apt-get update && apt-get install  python3-module-systemd fail2ban -y
+
+vim /etc/fail2ban/jail.d/sshd.local
+
+[DEFAULT]
+bantime = 60
+findtime = 600
+[sshd]
+enabled = true
+port = 2026
+filter = sshd
+maxretry = 2
+backend = systemd
+
+systemctl enable --now fail2ban
+
+# На BR-SRV|HQ-CLI пытайтесь зайти в учетную запись sshuser, неверно вводите пароли 2-3 раза, затем на HQ-SRV
+
+fail2ban-client status sshd
+
+# Там должен быть забаненный адрес, который провалил попытки входа.
