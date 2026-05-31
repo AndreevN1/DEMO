@@ -1,52 +1,52 @@
-Решение Модуля 1 (КОД 09.02.06-1-2026)
+Reshenie Modulya 1 (KOD 09.02.06-1-2026)
 
-Адресация
+Adresatsiya
 
-Устройство  Интерфейс  IP/маска  VLAN  Подсеть  Шлюз  Комментарий
-ISP  ens18 (WAN)  DHCP  DHCP  DHCP  в сторону магистрали
-ISP  ens19 (HQ)  172.16.1.1/28  172.16.1.0/28  к HQ-RTR
-ISP  ens20 (BR)  172.16.2.1/28  172.16.2.0/28  к BR-RTR
-HQ-RTR  ens18 (WAN)  172.16.1.2/28  172.16.1.0/28  172.16.1.1  к ISP
+Ustroystvo  Interfeys  IP/maska  VLAN  Podset  Shlyuz  Kommentariy
+ISP  ens18 (WAN)  DHCP  DHCP  DHCP  v storonu magistrali
+ISP  ens19 (HQ)  172.16.1.1/28  172.16.1.0/28  k HQ-RTR
+ISP  ens20 (BR)  172.16.2.1/28  172.16.2.0/28  k BR-RTR
+HQ-RTR  ens18 (WAN)  172.16.1.2/28  172.16.1.0/28  172.16.1.1  k ISP
 HQ-RTR  ens19.100  192.168.100.1/27  100  192.168.100.0/27  GW VLAN100
 HQ-RTR  ens19.200  192.168.200.1/27  200  192.168.200.0/27  GW VLAN200
 HQ-RTR  ens19.999  192.168.99.1/29  999  192.168.99.0/29  GW MGMT
-HQ-RTR  gre1  10.255.255.1/30  10.255.255.0/30  туннель в BR
-BR-RTR  ens18 (WAN)  172.16.2.2/28  172.16.2.0/28  172.16.2.1  к ISP
+HQ-RTR  gre1  10.255.255.1/30  10.255.255.0/30  tunnel v BR
+BR-RTR  ens18 (WAN)  172.16.2.2/28  172.16.2.0/28  172.16.2.1  k ISP
 BR-RTR  ens19 (LAN)  192.168.30.1/28  192.168.30.0/28  GW BR
-BR-RTR  gre1  10.255.255.2/30  10.255.255.0/30  туннель в HQ
+BR-RTR  gre1  10.255.255.2/30  10.255.255.0/30  tunnel v HQ
 HQ-SRV  ens18.100  192.168.100.10/27  100  192.168.100.0/27  192.168.100.1
 BR-SRV  ens18  192.168.30.10/28  192.168.30.0/28  192.168.30.1
-HQ-CLI  ens18.200  DHCP (резерв 192.168.200.10)  200  192.168.200.0/27  192.168.200.1
+HQ-CLI  ens18.200  DHCP (rezerv 192.168.200.10)  200  192.168.200.0/27  192.168.200.1
 
-МОДУЛЬ 1 - Настройка сетевой инфраструктуры
+MODUL 1 - Nastroyka setevoy infrastruktury
 
-1. Общие действия на каждой машине
+1. Obshchie deystviya na kazhdoy mashine
 
-Выполни на: ISP, HQ-RTR, BR-RTR, HQ-SRV, BR-SRV, HQ-CLI.
+Vypolni na: ISP, HQ-RTR, BR-RTR, HQ-SRV, BR-SRV, HQ-CLI.
 
 1.1 Hostname (FQDN)
 
 hostnamectl set-hostname hq-rtr.au-team.irpo
 
-1.2 Часовой пояс
+1.2 Chasovoy poyas
 
 timedatectl set-timezone Asia/Yekaterinburg
 
 timedatectl
 
-Проверки
+Proverki
 
 hostname -f
 
-2. ISP - etcnet, маршрутизация и NAT в интернет
+2. ISP - etcnet, marshrutizatsiya i NAT v internet
 
-2.1 Включить IPv4 forwarding
+2.1 Vklyuchit IPv4 forwarding
 
 vim /etc/net/sysctl.conf
 
 net.ipv4.ip_forward = 1
 
-2.2 Сеть (ens18=WAN DHCP, ens19=к HQ, ens20=к BR)
+2.2 Set (ens18=WAN DHCP, ens19=k HQ, ens20=k BR)
 
 WAN (DHCP)
 
@@ -60,7 +60,7 @@ BOOTPROTO=dhcp
 
 ONBOOT=yes
 
-К HQ-RTR
+K HQ-RTR
 
 mkdir -p /etc/net/ifaces/ens19
 
@@ -76,7 +76,7 @@ vim /etc/net/ifaces/ens19/ipv4address
 
 172.16.1.1/28
 
-К BR-RTR
+K BR-RTR
 
 mkdir -p /etc/net/ifaces/ens20
 
@@ -98,7 +98,7 @@ ip -br a
 
 ip r
 
-NAT (вариант iptables) на Isp, HQ-RTR и BR-RTR
+NAT (variant iptables) na Isp, HQ-RTR i BR-RTR
 
 apt-get update
 
@@ -110,7 +110,7 @@ iptables-save > /etc/sysconfig/iptables
 
 systemctl enable iptables
 
-Проверки
+Proverki
 
 ping -c 3 8.8.8.8
 
@@ -124,7 +124,7 @@ net.ipv4.ip_forward = 1
 
 sysctl -p /etc/net/sysctl.conf
 
-3.2 WAN (к ISP)
+3.2 WAN (k ISP)
 
 mkdir -p /etc/net/ifaces/ens18
 
@@ -148,7 +148,7 @@ vim /etc/net/ifaces/ens18/resolv.conf
 
 nameserver 77.88.8.7
 
-3.3 Trunk + VLAN подинтерфейсы (ens19.100/200/999)
+3.3 Trunk + VLAN podinterfeysy (ens19.100/200/999)
 
 mkdir -p /etc/net/ifaces/ens19
 
@@ -220,7 +220,7 @@ vim /etc/net/ifaces/ens19.999/ipv4address
 
 192.168.99.1/29
 
-3.4 Применить
+3.4 Primenit
 
 systemctl restart network
 
@@ -386,9 +386,9 @@ ip -br a
 
 ip r
 
-Пользователи и SSH (HQ-SRV BR-SRV)
+Polzovateli i SSH (HQ-SRV BR-SRV)
 
-8.1 Пользователь sshuser (UID 2026) + sudo без пароля
+8.1 Polzovatel sshuser (UID 2026) + sudo bez parolya
 
 useradd sshuser -u 2026
 
@@ -402,7 +402,7 @@ su - sshuser
 
 usermod -aG wheel sshuser
 
-8.2 SSHD hardening (порт 2026, только sshuser, 2 попытки, баннер)
+8.2 SSHD hardening (port 2026, tolko sshuser, 2 popytki, banner)
 
 apt-get install -y openssh-server
 
@@ -426,7 +426,7 @@ systemctl restart sshd
 
 ss -lntp | grep ':2026'
 
-9. Пользователь net_admin (HQ-RTR и BR-RTR)
+9. Polzovatel net_admin (HQ-RTR i BR-RTR)
 
 Useradd net_admin
 
@@ -440,7 +440,7 @@ net_admin ALL=(ALL:ALL) NOPASSWD: ALL
 
 su - net_admin
 
-10. GRE-туннель HQ <-> BR (HQ-RTR и BR-RTR)
+10. GRE-tunnel HQ <-> BR (HQ-RTR i BR-RTR)
 
 10.1 HQ-RTR
 
@@ -482,7 +482,7 @@ vim /etc/net/ifaces/gre1/ipv4address
 
 10.255.255.2/30
 
-10.3 Применить и проверить
+10.3 Primenit i proverit
 
 systemctl restart network
 
@@ -494,7 +494,7 @@ ping -c 2 10.255.255.2
 
 11. OSPF (FRR)
 
-11.1 Установка и включение ospfd (на обоих роутерах)
+11.1 Ustanovka i vklyuchenie ospfd (na oboikh routerakh)
 
 apt-get update
 
@@ -508,7 +508,7 @@ systemctl enable --now frr
 
 systemctl restart frr
 
-11.2 HQ-RTR - конфигурация vtysh
+11.2 HQ-RTR - konfiguratsiya vtysh
 
 vtysh
 
@@ -556,7 +556,7 @@ end
 
 write memory
 
-11.3 BR-RTR - конфигурация vtysh (пример)
+11.3 BR-RTR - konfiguratsiya vtysh (primer)
 
 vtysh
 
@@ -598,7 +598,7 @@ end
 
 write memory
 
-11.4 Проверки
+11.4 Proverki
 
 vtysh -c 'show ip ospf neighbor'
 
@@ -606,7 +606,7 @@ vtysh -c 'show ip route ospf'
 
 ip r | grep ospf || true
 
-13. DHCP на HQ-RTR для VLAN200
+13. DHCP na HQ-RTR dlya VLAN200
 
 apt-get update
 
@@ -640,13 +640,13 @@ systemctl restart dhcpd
 
 systemctl status dhcpd --no-pager
 
-Проверки на HQ-CLI
+Proverki na HQ-CLI
 
 ip -br a
 
 cat /etc/resolv.conf
 
-14. DNS на HQ-SRV (dnsmasq) - прямая и обратные зоны
+14. DNS na HQ-SRV (dnsmasq) - pryamaya i obratnye zony
 
 apt-get update
 
@@ -656,13 +656,13 @@ mkdir -p /etc/dnsmasq.conf.d
 
 vim /etc/dnsmasq.conf.d/au-team.conf
 
-Домен
+Domen
 
 domain=au-team.irpo
 
 local=/au-team.irpo/
 
-Слушаем HQ-SRV (основной DNS) + localhost
+Slushaem HQ-SRV (osnovnoy DNS) + localhost
 
 bind-interfaces
 
@@ -676,7 +676,7 @@ server=77.88.8.7
 
 server=77.88.8.3
 
---- A-записи по таблице 3 ---
+--- A-zapisi po tablitse 3 ---
 
 address=/hq-rtr.au-team.irpo/192.168.100.1
 
@@ -688,13 +688,13 @@ address=/hq-cli.au-team.irpo/192.168.200.10
 
 address=/br-srv.au-team.irpo/192.168.30.10
 
-ISP-интерфейсы по таблице 3
+ISP-interfeysy po tablitse 3
 
 address=/docker.au-team.irpo/172.16.1.1
 
 address=/web.au-team.irpo/172.16.2.1
 
---- PTR-записи (только где в таблице 3 указано A,PTR) ---
+--- PTR-zapisi (tolko gde v tablitse 3 ukazano A,PTR) ---
 
 ptr-record=1.100.168.192.in-addr.arpa,hq-rtr.au-team.irpo
 
@@ -712,9 +712,9 @@ dnsmasq --test
 
 ss -lntup | grep ':53' || true
 
-Модуль 2
+Modul 2
 
-Задание 1 - Samba DC
+Zadanie 1 - Samba DC
 
 apt-get install task-samba-dc -y
 
@@ -726,7 +726,7 @@ rm -rf /var/cache/samba/
 
 mkdir -p /var/lib/samba/sysvol
 
-В /etc/net/ifaces/ens18/resolv.conf
+V /etc/net/ifaces/ens18/resolv.conf
 
 search au-team.irpo
 
@@ -763,33 +763,33 @@ for i in {1..5}; do
 
 kinit Administrator
 
-Далее в hq-rtr заходим в конфигурационный файл /etc/dhcp/dhcpd.conf меняем здесь:
+Dalee v hq-rtr zakhodim v konfiguratsionnyy fayl /etc/dhcp/dhcpd.conf menyaem zdes:
 
-option domain-name-servers      адрес br-srv
+option domain-name-servers      adres br-srv
 
 systemctl restart dhcpd
 
-На Hq-cli
+Na Hq-cli
 
 systemctl restart network
 
-Заходим на HQ-CLI --> Меню(снизу слева) --> Раздел Приложения --> Администрирование --> Центр управления системой --> Раздел Пользователи --> Аутентификация
+Zakhodim na HQ-CLI --> Menyu(snizu sleva) --> Razdel Prilozheniya --> Administrirovanie --> Tsentr upravleniya sistemoy --> Razdel Polzovateli --> Autentifikatsiya
 
-Выбираем пункт Домен Active Directory
+Vybiraem punkt Domen Active Directory
 
-Вводим au-team.irpo в поле Домен
+Vvodim au-team.irpo v pole Domen
 
-Листаем вниз и нажимаем применить
+Listaem vniz i nazhimaem primenit
 
 roleadd hq wheel
 
-далее заходим в файл по пути nano /etc/sudoers.d/hq вставляем в этот файл
+dalee zakhodim v fayl po puti nano /etc/sudoers.d/hq vstavlyaem v etot fayl
 
 Cmnd_Alias SHELLCMD = /bin/cat, /bin/grep, /usr/bin/id
 
 WHEEL_USERS ALL=(ALL:ALL) SHELLCMD
 
-Задание 2. Сконфигурируйте файловое хранилище на сервере HQ-SRV:
+Zadanie 2. Skonfiguriruyte faylovoe khranilishche na servere HQ-SRV:
 
 apt-get install –y mdadm
 
@@ -799,7 +799,7 @@ mdadm --detail --scan --verbose | tee -a /etc/mdadm.conf
 
 mkfs.ext4 /dev/md0
 
-Редактируем файл /etc/fstab, прописывае следущее:
+Redaktiruem fayl /etc/fstab, propisyvae sledushchee:
 
 /dev/md0    /raid    ext4    defaults    0    0
 
@@ -809,7 +809,7 @@ mount -av
 
 Lsblk
 
-Задание 3. Настройте сервер сетевой файловой системы (nfs) на HQ-SRV:
+Zadanie 3. Nastroyte server setevoy faylovoy sistemy (nfs) na HQ-SRV:
 
 apt-get install nfs-server -y
 
@@ -817,7 +817,7 @@ mkdir /raid/nfs
 
 chmod -R 777 /raid/nfs
 
-Открываем файл /etc/exports и пишем в нем:
+Otkryvaem fayl /etc/exports i pishem v nem:
 
 /raid/nfs 192.168.200.0/28(rw)
 
@@ -825,69 +825,69 @@ exportfs -arv
 
 systemctl enable --now nfs-server
 
-Переходим на HQ-CLI
+Perekhodim na HQ-CLI
 
-Прописываем в терминале
+Propisyvaem v terminale
 
 mkdir /mnt/nfs
 
 chmod -R 777 /mnt/nfs
 
-Далее заходим в файл /etc/fstab прописываем в новой строчке
+Dalee zakhodim v fayl /etc/fstab propisyvaem v novoy strochke
 
 192.168.100.2:/raid/nfs /mnt/nfs nfs defaults 0 0
 
 df -h
 
-Задание 4.
+Zadanie 4.
 
-Открываем файл /etc/chrony.conf на машине ISP
+Otkryvaem fayl /etc/chrony.conf na mashine ISP
 
-переходим в файл /etc/chrony.conf
+perekhodim v fayl /etc/chrony.conf
 
-Меняет строчки
+Menyaet strochki
 
 local stratum 5
 
-Коментируем
+Komentiruem
 
 pool pool.ntp.org iburst
 
-После чего добавляем строчки:
+Posle chego dobavlyaem strochki:
 
 server ntp0.ntp-servers.net iburst prefer minstratum 4
 
 allow 0.0.0.0/0
 
-Перезагружаем chronyd
+Perezagruzhaem chronyd
 
 systemctl restart chronyd
 
-прописываем на всех машинах
+propisyvaem na vsekh mashinakh
 
 apt-get update && apt-get install chrony -y
 
-редактируем /etc/chrony.conf
+redaktiruem /etc/chrony.conf
 
-Комментируем
+Kommentiruem
 
 pool pool.ntp.org iburst
 
-Добавляем строки
+Dobavlyaem stroki
 
 server 172.16.1.1 iburst
 
-Перезагружаем chronyd
+Perezagruzhaem chronyd
 
 systemctl restart chronyd
 
-Для машин BR-RTR BR-SRV сервер будет 172.16.2.1 Для HQ-SRV HQ-CLI HQ-RTR сервер будет 172.16.1.1 соответственно
+Dlya mashin BR-RTR BR-SRV server budet 172.16.2.1 Dlya HQ-SRV HQ-CLI HQ-RTR server budet 172.16.1.1 sootvetstvenno
 
-Задание 5. Сконфигурируйте ansible на сервере BR-SRV:
+Zadanie 5. Skonfiguriruyte ansible na servere BR-SRV:
 
 apt-get update && apt-get install –y ansible sshpass
 
-Приведем файл инвентаря Ansible к следующему виду, отредактировав конфигурационный файл по пути /etc/ansible/hosts любым удобным текстовым редактором, например vim или nano:
+Privedem fayl inventarya Ansible k sleduyushchemu vidu, otredaktirovav konfiguratsionnyy fayl po puti /etc/ansible/hosts lyubym udobnym tekstovym redaktorom, naprimer vim ili nano:
 
 br-rtr ansible_ssh_host=192.168.3.1 ansible_ssh_user=net_admin ansible_ssh_pass=P@ssword
 
@@ -897,19 +897,19 @@ hq-srv ansible_ssh_host=192.168.100.2 ansible_ssh_user=sshuser ansible_ssh_pass=
 
 hq-cli ansible_ssh_host=192.168.200.3 ansible_ssh_user=Administrator@au-team.irpo ansible_ssh_pass=P@ssword
 
-Редактируем файл /etc/ansible/ansible.cfg, чтобы отключить проверку ключа хоста при подключении по SSH:
+Redaktiruem fayl /etc/ansible/ansible.cfg, chtoby otklyuchit proverku klyucha khosta pri podklyuchenii po SSH:
 
-Находим строчку "host_key_checking = False" и раскоментируем ёё
+Nakhodim strochku "host_key_checking = False" i raskomentiruem yoyo
 
 #host_key_checking = False >> host_key_checking = False
 
 ansible all -m ping
 
-Если у вас выводит кучу красного текста, необходимо перезапустить ssh на всех машинках котроые указаны в ansible.cfg
+Esli u vas vyvodit kuchu krasnogo teksta, neobkhodimo perezapustit ssh na vsekh mashinkakh kotroye ukazany v ansible.cfg
 
 systemctl restart sshd
 
-Задание 6.Разверните веб приложение в docker на сервере BR-SRV
+Zadanie 6.Razvernite veb prilozhenie v docker na servere BR-SRV
 
 apt-get update && apt-get install docker-engine docker-compose -y
 
@@ -923,7 +923,7 @@ docker load -i /mnt/docker/mariadb_latest.tar
 
 docker images
 
-Создаем файл по пути /root/compose.yaml
+Sozdaem fayl po puti /root/compose.yaml
 
 services:
 
@@ -983,7 +983,7 @@ docker compose up -d
 
 docker logs -f tespapp
 
-Задание 7. Разверните веб приложение на сервере HQ-SRV
+Zadanie 7. Razvernite veb prilozhenie na servere HQ-SRV
 
 apt-get install lamp-server -y
 
@@ -993,7 +993,7 @@ cp /mnt/web/index.php   /var/www/html/
 
 cp /mnt/web/logo.png   /var/www/html/
 
-Заходим в файл /var/www/html/index.php и изменяем параметры:
+Zakhodim v fayl /var/www/html/index.php i izmenyaem parametry:
 
 $servername = "localhost";
 
@@ -1021,9 +1021,9 @@ systemctl enable --now httpd2
 
 mariadb -u webc -p webdb < /mnt/web/dump.sql
 
-Задание 8. На маршрутизаторах сконфигурируйте статическую трансляцию портов:
+Zadanie 8. Na marshrutizatorakh skonfiguriruyte staticheskuyu translyatsiyu portov:
 
-Начнем с машины HQ-RTR
+Nachnem s mashiny HQ-RTR
 
 iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 2026 -j DNAT --to-destination 192.168.100.2:2026
 
@@ -1031,7 +1031,7 @@ iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 8080 -j DNAT --to-destinat
 
 iptables-save >> /etc/sysconfig/iptables
 
-Машина BR-RTR
+Mashina BR-RTR
 
 iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 2026 -j DNAT --to-destination 192.168.100.2:2026
 
@@ -1039,13 +1039,13 @@ iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 8080 -j DNAT --to-destinat
 
 iptables-save >> /etc/sysconfig/iptables
 
-Задание 9.Настройте веб-сервер nginx как обратный прокси-сервер на ISP
+Zadanie 9.Nastroyte veb-server nginx kak obratnyy proksi-server na ISP
 
 apt-get install nginx -y
 
-переходим в файл по пути /etc/nginx/sites-available.d/default.conf
+perekhodim v fayl po puti /etc/nginx/sites-available.d/default.conf
 
-вписываем в него
+vpisyvaem v nego
 
 server {
 
@@ -1079,19 +1079,19 @@ ln -sf /etc/nginx/sites-available.d/default.conf /etc/nginx/sites-enabled.d/
 
 systemctl enable --now nginx
 
-далее заходим в HQ-CLI файл по пути /etc/hosts в нем прописываем
+dalee zakhodim v HQ-CLI fayl po puti /etc/hosts v nem propisyvaem
 
 172.16.1.1 web.au-team.irpo
 
 172.16.2.1 docker.au-team.irpo
 
-Задание 10. На маршрутизаторе ISP настройте web-based аутентификацию:
+Zadanie 10. Na marshrutizatore ISP nastroyte web-based autentifikatsiyu:
 
 apt-get install apache2-htpasswd
 
 htpasswd -c /etc/nginx/.htpasswd WEB
 
-вписываем пароль P@ssw0rd 2 раза далее заходим в файл /etc/nginx/sites-available.d/default.conf добавляем
+vpisyvaem parol P@ssw0rd 2 raza dalee zakhodim v fayl /etc/nginx/sites-available.d/default.conf dobavlyaem
 
 server {
 
@@ -1127,19 +1127,19 @@ server {
 
 systemctl restart nginx
 
-Задание 11. Удобным способом установите приложение Яндекс Браузер на HQ-CLI
+Zadanie 11. Udobnym sposobom ustanovite prilozhenie Yandeks Brauzer na HQ-CLI
 
 apt-get install yandex-browser
 
 ============================================================
-МОДУЛЬ 3
+MODUL 3
 
 
-Задание 1. Выполните импорт пользователей в домен au-team.irpo
+Zadanie 1. Vypolnite import polzovateley v domen au-team.irpo
 
 BR-SRV:
 
-mcedit(или vim) import.sh
+mcedit(ili vim) import.sh
 
 #!/bin/bash
 
@@ -1155,7 +1155,7 @@ done < <(tail -n +2 "$FILE")
 chmod +x import.sh
 ./import.sh
 
-Задание 5. Настройка сетевой печати (CUPS)
+Zadanie 5. Nastroyka setevoy pechati (CUPS)
 
 #_______________________________________HQ-SRV__________________________________________
 apt-get update && apt-get install cups cups-pdf -y
@@ -1174,7 +1174,7 @@ systemctl status cups
 lpadmin -p HQ-PDF -E -v ipp://192.168.100.2/printers/Cups-PDF -m everywhere
 lpadmin -d HQ-PDF
 
-В поиске ввести "Print"(или принтер) > Нажать на "Настройки принтера"(Print Settings) > Далее нажать на HQ-PDF > Print Test Page(Отсканировать тестовую страницу)
+V poiske vvesti "Print"(ili printer) > Nazhat na "Nastroyki printera"(Print Settings) > Dalee nazhat na HQ-PDF > Print Test Page(Otskanirovat testovuyu stranitsu)
 
 
 #_______________________________________HQ-SRV__________________________________________
@@ -1186,9 +1186,9 @@ chmod 777 /raid/nfs/Print.pdf
 
 #_______________________________________HQ-CLI__________________________________________
 
-На рабочем столе нажать на  домашнюю папку > затем подняться на два уровня (До "/") > Найти /mnt/nft > Проверить PDF на валидность.
+Na rabochem stole nazhat na  domashnyuyu papku > zatem podnyatsya na dva urovnya (Do "/") > Nayti /mnt/nft > Proverit PDF na validnost.
 
-Задание 9. Настройка Fail2ban
+Zadanie 9. Nastroyka Fail2ban
 
 #_______________________________________HQ-SRV__________________________________________
 
@@ -1208,8 +1208,8 @@ backend = systemd
 
 systemctl enable --now fail2ban
 
-# На BR-SRV|HQ-CLI пытайтесь зайти в учетную запись sshuser, неверно вводите пароли 2-3 раза, затем на HQ-SRV
+# Na BR-SRV|HQ-CLI pytaytes zayti v uchetnuyu zapis sshuser, neverno vvodite paroli 2-3 raza, zatem na HQ-SRV
 
 fail2ban-client status sshd
 
-# Там должен быть забаненный адрес, который провалил попытки входа.
+# Tam dolzhen byt zabanennyy adres, kotoryy provalil popytki vkhoda.
