@@ -793,15 +793,15 @@ Zadanie 2. Skonfiguriruyte faylovoe khranilishche na servere HQ-SRV:
 
 apt-get install –y mdadm
 
-mdadm --create /dev/md0 –l 0 –n 2 /dev/sdb /dev/sdc
+mdadm --create /dev/md3 –l 5 –n 3 /dev/sdb /dev/sdc /dev/sdd
 
 mdadm --detail --scan --verbose | tee -a /etc/mdadm.conf
 
-mkfs.ext4 /dev/md0
+mkfs.ext4 /dev/md3
 
 Redaktiruem fayl /etc/fstab, propisyvae sledushchee:
 
-/dev/md0    /raid    ext4    defaults    0    0
+/dev/md3    /raid    ext4    defaults    0    0
 
 mkdir /raid
 
@@ -847,7 +847,7 @@ perekhodim v fayl /etc/chrony.conf
 
 Menyaet strochki
 
-local stratum 5
+local stratum 8
 
 Komentiruem
 
@@ -919,7 +919,7 @@ mount /dev/sr0    /mnt/
 
 docker load -i /mnt/docker/site_latest.tar
 
-docker load -i /mnt/docker/mariadb_latest.tar
+docker load -i /mnt/docker/postgresql.tar
 
 docker images
 
@@ -931,19 +931,19 @@ services:
 
     container_name: db
 
-    image: mariadb:10.11
+    image: mariadb:10.11////image: postgresql:latest
 
     restart: always
 
     ports:
 
-      - "3306:3306"
+      - "3306:3306" ///// "5432:5432"
 
     environment:
 
-      MARIADB_DATABASE: testdb
+      MARIADB_DATABASE: testdb3
 
-      MARIADB_USER: test
+      MARIADB_USER: test3
 
       MARIADB_PASSWORD: P@ssw0rd
 
@@ -951,7 +951,7 @@ services:
 
   app:
 
-    container_name: tespapp
+    container_name: site
 
     image: site:latest
 
@@ -959,19 +959,19 @@ services:
 
     ports:
 
-      - "8080:8000"
+      - "8083:8000"
 
     environment:
 
-      DB_TYPE: maria
+      DB_TYPE: mariadb
 
       DB_HOST: 192.168.3.2
 
-      DB_PORT: "3306"
+      DB_PORT: "3306" ///// "5432"
 
-      DB_NAME: testdb
+      DB_NAME: testdb3
 
-      DB_USER: test
+      DB_USER: test3
 
       DB_PASS: P@ssw0rd
 
@@ -991,13 +991,13 @@ mount /dev/sr0   /mnt/
 
 cp /mnt/web/index.php   /var/www/html/
 
-cp /mnt/web/logo.png   /var/www/html/
+cp /mnt/web/logo.png   /var/www/html/   /////////////// cp -r /mnt/web/images /var/www/html/
 
 Zakhodim v fayl /var/www/html/index.php i izmenyaem parametry:
 
 $servername = "localhost";
 
-$username = "webc";
+$username = "webc3";
 
 $password = "P@ssw0rd";
 
@@ -1009,9 +1009,9 @@ mariadb -u root
 
 CREATE DATABASE webdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE USER 'webc'@'localhost' IDENTIFIED BY 'P@ssw0rd';
+CREATE USER 'web3'@'localhost' IDENTIFIED BY 'P@ssw0rd';
 
-GRANT ALL PRIVILEGES ON webdb.* TO 'webc'@'localhost';
+GRANT ALL PRIVILEGES ON webdb.* TO 'web3'@'localhost';
 
 FLUSH PRIVILEGES;
 
@@ -1019,23 +1019,23 @@ EXIT;
 
 systemctl enable --now httpd2
 
-mariadb -u webc -p webdb < /mnt/web/dump.sql
+mariadb -u web3 -p webdb < /mnt/web/dump.sql
 
 Zadanie 8. Na marshrutizatorakh skonfiguriruyte staticheskuyu translyatsiyu portov:
 
 Nachnem s mashiny HQ-RTR
 
-iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 2026 -j DNAT --to-destination 192.168.100.2:2026
+iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 2013 -j DNAT --to-destination 192.168.100.2:2013
 
-iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 8080 -j DNAT --to-destination 192.168.100.2:80
+iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 8083 -j DNAT --to-destination 192.168.100.2:80
 
 iptables-save >> /etc/sysconfig/iptables
 
 Mashina BR-RTR
 
-iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 2026 -j DNAT --to-destination 192.168.100.2:2026
+iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 2013 -j DNAT --to-destination 192.168.100.2:2013
 
-iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 8080 -j DNAT --to-destination 192.168.100.2:8080
+iptables -t nat -A PREROUTING -i ens18 -p tcp --dport 8083 -j DNAT --to-destination 192.168.100.2:8083
 
 iptables-save >> /etc/sysconfig/iptables
 
@@ -1055,7 +1055,7 @@ server {
 
     location / {
 
-        proxy_pass http://172.16.1.2:8080;
+        proxy_pass http://172.16.1.2:8083;
 
     }
 
@@ -1069,7 +1069,7 @@ server {
 
     location / {
 
-        proxy_pass http://172.16.2.2:8080;
+        proxy_pass http://172.16.2.2:8083;
 
     }
 
@@ -1089,7 +1089,7 @@ Zadanie 10. Na marshrutizatore ISP nastroyte web-based autentifikatsiyu:
 
 apt-get install apache2-htpasswd
 
-htpasswd -c /etc/nginx/.htpasswd WEB
+htpasswd -c /etc/nginx/.htpasswd Kazimir
 
 vpisyvaem parol P@ssw0rd 2 raza dalee zakhodim v fayl /etc/nginx/sites-available.d/default.conf dobavlyaem
 
@@ -1101,9 +1101,9 @@ server {
 
     location / {
 
-        proxy_pass http://172.16.1.2:8080;
+        proxy_pass http://172.16.1.2:8083;
 
-        auth_basic "Restructed area";
+        auth_basic "Restricted area";
 
         auth_basic_user_file /etc/nginx/.htpasswd;
 
@@ -1135,7 +1135,7 @@ apt-get install yandex-browser
 MODUL 3
 
 
-Zadanie 1. Vypolnite import polzovateley v domen au-team.irpo
+Zadanie 1. Vypolnite import polzovateley v domen au-team.irpo------------------------------------------------------
 
 BR-SRV:
 
@@ -1155,7 +1155,7 @@ done < <(tail -n +2 "$FILE")
 chmod +x import.sh
 ./import.sh
 
-Zadanie 5. Nastroyka setevoy pechati (CUPS)
+Zadanie 5. Nastroyka setevoy pechati (CUPS)---------------------------------------------------
 
 #_______________________________________HQ-SRV__________________________________________
 apt-get update && apt-get install cups cups-pdf -y
@@ -1188,7 +1188,7 @@ chmod 777 /raid/nfs/Print.pdf
 
 Na rabochem stole nazhat na  domashnyuyu papku > zatem podnyatsya na dva urovnya (Do "/") > Nayti /mnt/nft > Proverit PDF na validnost.
 
-Zadanie 9. Nastroyka Fail2ban
+Zadanie 9. Nastroyka Fail2ban--------------------------------------------------
 
 #_______________________________________HQ-SRV__________________________________________
 
@@ -1213,3 +1213,31 @@ systemctl enable --now fail2ban
 fail2ban-client status sshd
 
 # Tam dolzhen byt zabanennyy adres, kotoryy provalil popytki vkhoda.
+
+
+Zadanie 8-------------------------
+
+mount -o loop /dev/sr0 /mnt
+cp /mnt/playbook/get_hostname_address.yml /etc/ansible/playbook.yml
+mkdir -p /etc/ansible/PC-INFO
+vim /etc/ansible/playbook.yml
+
+- name: PC-INFO
+  hosts: LMX
+  tasks:
+    - name: получение данных с хоста
+      copy:
+        dest: /etc/ansible/PC-INFO/{{ ansible_hostname }}.txt
+        content: |
+          Hostname: {{ ansible_hostname }}
+          IP_Address: {{ ansible_default_ipv4.address }}
+      delegate_to: 127.0.0.1
+
+vim /etc/ansible/hosts
+
+[LMX] 
+ hosts  
+ HQ-SRV  
+ HQ-CLI
+
+ansible-playbook /etc/ansible/playbook.yml
