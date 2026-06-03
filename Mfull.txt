@@ -819,7 +819,7 @@ chmod -R 777 /raid/nfs
 
 Otkryvaem fayl /etc/exports i pishem v nem:
 
-/raid/nfs 192.168.200.0/28(rw)
+/raid/nfs 192.168.200.0/28(rw)  ------maska VLAN200
 
 exportfs -arv
 
@@ -896,6 +896,8 @@ hq-rtr ansible_ssh_host=172.16.1.2 ansible_ssh_user=net_admin ansible_ssh_pass=P
 hq-srv ansible_ssh_host=192.168.100.2 ansible_ssh_user=sshuser ansible_ssh_pass=P@ssword ansible_ssh_port=2026
 
 hq-cli ansible_ssh_host=192.168.200.3 ansible_ssh_user=Administrator@au-team.irpo ansible_ssh_pass=P@ssword
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3
 
 Redaktiruem fayl /etc/ansible/ansible.cfg, chtoby otklyuchit proverku klyucha khosta pri podklyuchenii po SSH:
 
@@ -1241,3 +1243,374 @@ vim /etc/ansible/hosts
  HQ-CLI
 
 ansible-playbook /etc/ansible/playbook.yml
+
+
+============================================================
+MODUL 3 - zadaniya 4-10
+============================================================
+
+--- M3.4 MEZHSEEVOJ EKRAN (HQ-RTR i BR-RTR) ---
+# Primenyat POSLE port forwarding iz M2.8
+# Inache poteryaesh dostup k mashinam
+
+# SHAG 1 - posmotret tekushie pravila
+iptables -L -n -v
+iptables -t nat -L -n -v
+
+# SHAG 2 - HQ-RTR - dobavlyat po odnomu, posle kazhdogo proverka
+iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A INPUT -p icmp -j ACCEPT
+iptables -A INPUT -p tcp --dport 2026 -j ACCEPT
+iptables -A INPUT -p udp --dport 53 -j ACCEPT
+iptables -A INPUT -p tcp --dport 53 -j ACCEPT
+iptables -A INPUT -p udp --dport 123 -j ACCEPT
+iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A FORWARD -i ens19.100 -o ens18 -j ACCEPT
+iptables -A FORWARD -i ens19.200 -o ens18 -j ACCEPT
+iptables -A FORWARD -i gre1 -j ACCEPT
+iptables -A FORWARD -o gre1 -j ACCEPT
+
+# SHAG 3 - proverit svyaznost DO blokировки
+ping -c 2 IP_BR-SRV
+ping -c 2 8.8.8.8
+
+# SHAG 4 - blokirovatь novye soedineniya s WAN
+# NE stavit -P INPUT DROP - mozhno poteryat dostup!
+iptables -A FORWARD -i ens18 -m conntrack --ctstate NEW -j DROP
+iptables -A INPUT -i ens18 -m conntrack --ctstate NEW -j DROP
+
+# SHAG 5 - sohranit
+iptables-save > /etc/sysconfig/iptables
+systemctl enable iptables
+
+# BR-RTR - to zhe samoe, no ens19 bez VLAN
+iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A INPUT -p icmp -j ACCEPT
+iptables -A INPUT -p tcp --dport 2026 -j ACCEPT
+iptables -A INPUT -p udp --dport 53 -j ACCEPT
+iptables -A INPUT -p udp --dport 123 -j ACCEPT
+iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A FORWARD -i ens19 -o ens18 -j ACCEPT
+iptables -A FORWARD -i gre1 -j ACCEPT
+iptables -A FORWARD -o gre1 -j ACCEPT
+iptables -A FORWARD -i ens18 -m conntrack --ctstate NEW -j DROP
+iptables -A INPUT -i ens18 -m conntrack --ctstate NEW -j DROP
+iptables-save > /etc/sysconfig/iptables
+systemctl enable iptables
+
+# DIAGNOSTIKA
+iptables -L INPUT -n -v --line-numbers  # posmotret pravila s nomerami
+iptables -D INPUT 5                     # udalit pravilo nomer 5
+iptables -F                             # sbrosit vse esli sovsem plokho
+
+
+--- M3.5 CUPS + PDF-printer (HQ-SRV -> HQ-CLI) ---
+
+# SHAG 1 - HQ-SRV
+apt-get install -y cups cups-pdf
+systemctl enable --now cups
+
+# SHAG 2 - proverit port
+ss -lntp | grep 631
+# esli tolko 127.0.0.1:631 - nado ispravit
+
+# SHAG 3 - proverit stroki v konfige
+grep -n "Listen" /etc/cups/cupsd.conf
+
+# SHAG 4 - otkryt dostup izvne
+vim /etc/cups/cupsd.conf
+# zamenit: Listen localhost:631 -> Listen *:631
+# v sektsii <Location /> dobavit:
+# Order allow,deny
+# Allow all
+# v sektsii <Location /admin> to zhe samoe
+
+# SHAG 5 - pereзapustit i proverit port
+systemctl restart cups
+ss -lntp | grep 631  # dolzhen byt 0.0.0.0:631
+
+# SHAG 6 - dobavit printer
+lpinfo -m | grep -i pdf   # proverit chto drajver est
+lpadmin -p PDF -E -v cups-pdf:/ -m CUPS-PDF.ppd
+lpadmin -p PDF -o printer-is-shared=true
+
+# SHAG 7 - proverka na HQ-SRV
+lpstat -p     # printer PDF is idle
+lpstat -v     # pokazat URI printera
+
+# HQ-CLI
+apt-get install -y cups-client
+curl -v http://IP_HQ-SRV:631    # proverit dostupnost servera
+
+lpadmin -p PDF -E -v ipp://IP_HQ-SRV:631/printers/PDF -m everywhere
+# esli -m everywhere ne rabotaet:
+# lpadmin -p PDF -E -v ipp://IP_HQ-SRV:631/printers/PDF
+
+lpoptions -d PDF
+
+# Proverka
+lpstat -p && lpstat -d
+# dolzhno byt: system default destination: PDF
+
+
+--- M3.6 RSYSLOG server (HQ-SRV) + klienty ---
+
+# SHAG 1 - HQ-SRV
+apt-get install -y rsyslog
+systemctl enable --now rsyslog
+
+# SHAG 2 - proverit tekushij konfig
+grep -n "imudp\|imtcp" /etc/rsyslog.conf
+
+# SHAG 3 - raskомmentirovat UDP i TCP
+sed -i 's/^#module(load="imudp")/module(load="imudp")/' /etc/rsyslog.conf
+sed -i 's/^#input(type="imudp" port="514")/input(type="imudp" port="514")/' /etc/rsyslog.conf
+sed -i 's/^#module(load="imtcp")/module(load="imtcp")/' /etc/rsyslog.conf
+sed -i 's/^#input(type="imtcp" port="514")/input(type="imtcp" port="514")/' /etc/rsyslog.conf
+
+# SHAG 4 - proverit chto raskommentirovalos
+grep -n "imudp\|imtcp" /etc/rsyslog.conf
+
+# SHAG 5 - shablon dlya sohraneniya logov
+mkdir -p /opt
+cat > /etc/rsyslog.d/remote.conf << 'EOF'
+$template RemoteLogs,"/opt/%HOSTNAME%/%PROGRAMNAME%.log"
+*.warn ?RemoteLogs
+& stop
+EOF
+
+# SHAG 6 - pereзapустit i proverit port
+systemctl restart rsyslog
+ss -lnup | grep 514   # dolzhen byt 0.0.0.0:514
+
+# esli port ne slushaet - smotret oshibki
+journalctl -u rsyslog -n 20
+
+# Rotaciya logov
+cat > /etc/logrotate.d/remote-logs << 'EOF'
+/opt/*/*.log {
+    weekly
+    compress
+    missingok
+    notifempty
+    minsize 10M
+    sharedscripts
+    postrotate
+        systemctl reload rsyslog
+    endscript
+}
+EOF
+
+# KLIENTY: HQ-RTR, BR-RTR, BR-SRV - odinakovo na vsех
+apt-get install -y rsyslog
+echo '*.warn @@IP_HQ-SRV:514' > /etc/rsyslog.d/client.conf
+systemctl restart rsyslog
+
+# Test
+logger -p warning "test from $(hostname)"
+sleep 2
+
+# Na HQ-SRV proverit
+ls /opt/
+# dolzhny poyavitsya papki: hq-rtr/ br-rtr/ br-srv/
+
+# DIAGNOSTIKA esli logi ne prikhodyat
+nc -vzu IP_HQ-SRV 514   # UDP dostupnost
+nc -vz  IP_HQ-SRV 514   # TCP dostupnost
+journalctl -u rsyslog -n 20  # oshibki na kliente
+
+
+--- M3.7 MONITORING Netdata (HQ-SRV) ---
+
+# SHAG 1 - ustanovka
+apt-get install -y netdata
+systemctl enable --now netdata
+
+# SHAG 2 - proverit na kakom adrese slushaet
+ss -lntp | grep 19999
+# esli tolko 127.0.0.1:19999 - nado ispravit
+
+# SHAG 3 - najti stroku v konfige
+grep -n "bind" /etc/netdata/netdata.conf
+
+# SHAG 4 - otkryt vruchnuyu (bezopasnee chem sed)
+vim /etc/netdata/netdata.conf
+# v sekcii [global] najti ili dobavit:
+#     bind to = 0.0.0.0
+
+systemctl restart netdata
+ss -lntp | grep 19999   # teper dolzhen byt 0.0.0.0:19999
+
+# SHAG 5 - proverit chto otvechaet
+curl -s http://127.0.0.1:19999        # s samogo HQ-SRV
+curl -s http://IP_HQ-SRV:19999        # s drugoj mashiny
+
+# SHAG 6 - DNS zapis
+grep "mon" /etc/dnsmasq.conf.d/au-team.conf  # proverit net li uzhe
+echo 'address=/mon.au-team.irpo/IP_HQ-SRV' >> /etc/dnsmasq.conf.d/au-team.conf
+dnsmasq --test   # proverit sintaksis - dolzhno byt OK
+systemctl restart dnsmasq
+
+# SHAG 7 - nginx proksi
+apt-get install -y nginx
+
+cat > /etc/nginx/conf.d/mon.conf << 'EOF'
+server {
+    listen 80;
+    server_name mon.au-team.irpo;
+    location / {
+        proxy_pass http://127.0.0.1:19999;
+        proxy_set_header Host $host;
+    }
+}
+EOF
+
+nginx -t   # dolzhno byt OK
+systemctl enable --now nginx && systemctl reload nginx
+
+# SHAG 8 - proverka
+curl -s -o /dev/null -w "%{http_code}" http://mon.au-team.irpo
+# 200 = vse rabotaet
+# 502 = nginx rabotaet no netdata ne otvechaet -> proverit port 19999
+# 404 = nginx ne nashel konfig -> nginx -t
+# 000 = DNS ne rezolvitsya -> proverit dnsmasq
+
+
+--- M3.8 ANSIBLE PC-INFO (BR-SRV) ---
+
+# SHAG 1 - ubeditsya chto M2.5 rabotaet
+cd /etc/ansible
+ansible -m ping all   # vse dolzhny byt SUCCESS
+
+# esli ne SUCCESS - smotret:
+cat /etc/ansible/hosts
+cat /etc/ansible/ansible.cfg
+
+# SHAG 2 - poprobovat plajbuk iz iso
+mount /dev/sr0 /mnt 2>/dev/null || mount /dev/cdrom /mnt
+ls /mnt/playbook/   # posmotret chto tam est
+
+# SHAG 3 - skopirovat ili sozdat svoj
+mkdir -p /etc/ansible/PC-INFO
+
+cat > /etc/ansible/playbook.yml << 'EOF'
+---
+- name: PC-INFO
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Save host info
+      copy:
+        dest: /etc/ansible/PC-INFO/{{ ansible_hostname }}.txt
+        content: |
+          Hostname: {{ ansible_hostname }}
+          IP_Address: {{ ansible_default_ipv4.address }}
+      delegate_to: 127.0.0.1
+EOF
+
+# SHAG 4 - proverit sintaksis
+ansible-playbook playbook.yml --syntax-check
+
+# SHAG 5 - zapustit s podrobnym vyvodom
+ansible-playbook playbook.yml -v
+
+# SHAG 6 - diagnostika
+# esli "unreachable" - problema SSH:
+ssh -p 2026 sshuser@IP_HQ-SRV
+ssh -p 2026 sshuser@IP_HQ-CLI
+
+# esli "gather_facts failed" - python net na hoste:
+ansible all -m raw -a "python3 --version"
+
+# proverit resultat
+ls -la /etc/ansible/PC-INFO/
+cat /etc/ansible/PC-INFO/hq-srv.txt
+cat /etc/ansible/PC-INFO/hq-cli.txt
+
+
+--- M3.9 FAIL2BAN (HQ-SRV) ---
+
+# SHAG 1 - ustanovka
+apt-get install -y fail2ban
+
+# SHAG 2 - sozdat konfig
+cat > /etc/fail2ban/jail.d/sshd.conf << 'EOF'
+[sshd]
+enabled  = true
+port     = 2026
+maxretry = 3
+bantime  = 60
+findtime = 300
+backend  = systemd
+EOF
+
+# SHAG 3 - zapustit
+systemctl enable --now fail2ban
+systemctl restart fail2ban
+
+# SHAG 4 - proverka
+fail2ban-client status          # spisok jail
+fail2ban-client status sshd     # status jail sshd
+
+# esli jail sshd ne poyavilsya - smotret log:
+journalctl -u fail2ban -n 30
+# chastaya oshibka - nevernyi backend
+# poprobovatь: backend = auto
+
+# SHAG 5 - test bana
+# S HQ-CLI:
+for i in 1 2 3; do
+  ssh -p 2026 -o ConnectTimeout=3 wronguser@IP_HQ-SRV
+done
+
+# Na HQ-SRV proverit:
+fail2ban-client status sshd
+# Banned IP list: dolzhen byt IP_HQ-CLI
+
+# SHAG 6 - razbanit vruchnuyu
+fail2ban-client set sshd unbanip IP_HQ-CLI
+
+
+--- M3.10 KIBER BEKAP (HQ-SRV + HQ-CLI) ---
+
+# SHAG 1 - najti ustanovshiki v iso
+mount /dev/sr0 /mnt 2>/dev/null || mount /dev/cdrom /mnt
+find /mnt -name "*.rpm" | sort
+find /mnt -name "*.sh" | sort
+
+# SHAG 2 - ustanovit server na HQ-SRV
+rpm -ivh /mnt/<ManagementServer_file>.rpm
+# pri oshibke zavisimostej:
+apt-get install -f
+# ili:
+rpm -ivh --nodeps /mnt/<ManagementServer_file>.rpm
+
+# SHAG 3 - proverit zapustilsya
+systemctl status cyberbackup-ms
+ss -lntp | grep 9877
+
+# SHAG 4 - ustanovit agent na HQ-CLI
+rpm -ivh /mnt/<Agent_file>.rpm
+systemctl status cyberbackup-agent
+
+# SHAG 5 - papka dlya bekapa na HQ-CLI
+mkdir -p /backup && chmod 777 /backup
+
+# SHAG 6 - otkryt v brauzere HQ-CLI
+# https://IP_HQ-SRV:9877
+# esli ne otkryvaetsya https - poprobovat http://IP_HQ-SRV:9877
+# esli voobshe ne otvechaet:
+systemctl restart cyberbackup-ms
+journalctl -u cyberbackup-ms -n 30
+
+# SHAG 7 - posledovatelnost v GUI:
+# 1. Sozdat organizaciyu: irpo
+# 2. Sozdat polzovatelya: irpoadmin / P@ssw0rd / rol Administrator
+# 3. Ustrojstva -> Dobavit -> IP_HQ-CLI
+# 4. Hranilischa -> Dobavit -> /backup na HQ-CLI
+# 5. Plany -> Sozdat -> Fajly -> /etc -> /backup -> Zapustit
+# 6. Plany -> Sozdat -> Bazy dannyh -> MySQL -> webdb -> /backup -> Zapustit
+# 7. Istoriya zadanij -> proverit status oboih planov
+
